@@ -50,19 +50,29 @@
     .titlebar-controls {
       -webkit-app-region: no-drag;
       display: flex;
-      gap: 8px;
+      gap: 0;
+      height: 32px;
     }
 
     .titlebar-btn {
-      width: 12px; height: 12px;
-      border-radius: 50%;
+      width: 46px;
+      height: 32px;
+      border-radius: 0;
       border: none;
       cursor: pointer;
-      transition: opacity 0.2s;
+      transition: background-color 0.15s;
+      background: transparent;
+      color: #d5d7db;
+      font-family: 'Segoe UI Symbol', 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
     }
-    .titlebar-btn:hover { opacity: 0.8; }
-    .titlebar-btn.close { background: #ff5f57; }
-    .titlebar-btn.minimize { background: #febc2e; }
+    .titlebar-btn:hover { background: #2a2d2f; color: #fff; }
+    .titlebar-btn.close:hover { background: #e81123; color: #fff; }
 
     /* ── Sidebar Nav ── */
     .sidebar {
@@ -438,6 +448,115 @@
       max-width: 760px;
     }
 
+    .home-grid {
+      display: grid;
+      gap: 20px;
+      max-width: 760px;
+    }
+
+    .shoutout-rotator {
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .shoutout-title {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .shoutout-message {
+      font-size: 20px;
+      line-height: 1.4;
+      color: var(--text);
+      margin-bottom: 14px;
+      opacity: 1;
+      transition: opacity 0.45s ease;
+    }
+
+    .shoutout-meta {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-line;
+      opacity: 1;
+      transition: opacity 0.45s ease;
+    }
+
+    .shoutout-reaction-row {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .shoutout-react-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .shoutout-react-btn {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      min-width: 42px;
+    }
+
+    .shoutout-react-btn:hover {
+      background: #1b1b1b;
+    }
+
+    .shoutout-react-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .shoutout-reaction-count {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .reaction-chip {
+      border: 1px solid #2a2a2a;
+      background: #0d0d0d;
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: #ddd;
+      font-size: 12px;
+    }
+
+    .shoutout-message.fade-out,
+    .shoutout-meta.fade-out {
+      opacity: 0;
+    }
+
+    .suggestion-type-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .suggestion-hidden {
+      display: none;
+    }
+
     .suggestion-status {
       margin-top: 12px;
       min-height: 20px;
@@ -612,8 +731,9 @@
   <!-- Custom title bar -->
   <div class="titlebar">
     <div class="titlebar-controls">
-      <button class="titlebar-btn minimize" onclick="window.toaAPI.minimizeApp()"></button>
-      <button class="titlebar-btn close" onclick="window.toaAPI.closeApp()"></button>
+      <button class="titlebar-btn minimize" onclick="window.toaAPI.minimizeApp()" aria-label="Minimize">─</button>
+      <button class="titlebar-btn maximize" onclick="window.toaAPI.toggleMaximize()" aria-label="Maximize">□</button>
+      <button class="titlebar-btn close" onclick="window.toaAPI.closeApp()" aria-label="Close">✕</button>
     </div>
   </div>
 
@@ -629,9 +749,13 @@
     </div>
 
     <div class="nav-items">
-      <div class="nav-item active" data-page="discounts">
-        <span class="nav-icon">🏷️</span>
-        Discount Codes
+      <div class="nav-item active" data-page="home">
+        <span class="nav-icon">⌂</span>
+        Home
+      </div>
+      <div class="nav-item" data-page="discounts">
+        <span class="nav-icon">#</span>
+        Override Codes
       </div>
       <div class="nav-item" data-page="page2">
         <span class="nav-icon">📋</span>
@@ -647,7 +771,7 @@
     <div class="sidebar-bottom-nav">
       <div class="nav-item" data-page="suggestions">
         <span class="nav-icon">S</span>
-        Suggestions
+        Suggestions/Shout Outs
       </div>
     </div>
 
@@ -662,10 +786,45 @@
   <!-- Main -->
   <main class="main">
 
-    <!-- Discount Codes Page -->
-    <div class="page active" id="page-discounts">
+    <div class="page active" id="page-home">
       <div class="page-header">
-        <h1>Discount Codes</h1>
+        <h1>Home</h1>
+        <p>Welcome to RQ Companion</p>
+      </div>
+
+      <div class="home-grid">
+        <div class="card">
+          <div class="card-label">Quick Start</div>
+          <p style="color: var(--muted); font-size: 13px; line-height: 1.6;">
+            Use <strong>Override Codes</strong> to generate and log override codes,
+            <strong>Stack Ranker</strong> to view ranking metrics, and
+            <strong>Suggestions</strong> to submit app improvements.
+          </p>
+        </div>
+
+        <div class="card shoutout-rotator">
+          <div>
+            <div class="shoutout-title">Shout Outs</div>
+            <div class="shoutout-message" id="homeShoutOutMessage">Loading shout outs...</div>
+          </div>
+          <div class="shoutout-meta" id="homeShoutOutMeta"></div>
+          <div class="shoutout-reaction-row">
+            <div class="shoutout-react-buttons">
+              <button class="shoutout-react-btn" id="reactLikeBtn" title="Like">👍</button>
+              <button class="shoutout-react-btn" id="reactLoveBtn" title="Love">❤️</button>
+              <button class="shoutout-react-btn" id="reactLaughBtn" title="Laugh">😂</button>
+              <button class="shoutout-react-btn" id="reactClapBtn" title="Clap">👏</button>
+            </div>
+            <div class="shoutout-reaction-count" id="homeShoutOutReactionCount"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Override Codes Page -->
+    <div class="page" id="page-discounts">
+      <div class="page-header">
+        <h1>Override Codes</h1>
         <p>Select a code type then generate one for your customer</p>
       </div>
 
@@ -684,11 +843,11 @@
           <div class="card-label">Used By</div>
           <div class="input-group">
             <label>Employee Name</label>
-            <input type="text" id="employeeNameInput" placeholder="e.g. John S." />
+            <input type="text" id="employeeNameInput" placeholder="Type name" />
           </div>
           <div class="input-group">
             <label>Customer Name</label>
-            <input type="text" id="customerNameInput" placeholder="e.g. Jane D." />
+            <input type="text" id="customerNameInput" placeholder="Type name" />
           </div>
           <div class="card-label" style="margin-top:8px;">Notes</div>
           <div class="input-group">
@@ -717,7 +876,7 @@
     <div class="page" id="page-page2">
       <div class="page-header">
         <h1>Stack Ranker</h1>
-        <p>View-only table from the Stack Ranker Google Sheet tab</p>
+        <p>View-only stack ranker table</p>
       </div>
 
       <div class="stack-ranker-card">
@@ -742,21 +901,29 @@
 
     <div class="page" id="page-suggestions">
       <div class="page-header">
-        <h1>Suggestions</h1>
-        <p>Send suggestions directly into the team Google Sheet</p>
+        <h1>Suggestions &amp; Shout Outs</h1>
+        <p>Send suggestions and shout outs directly to the team</p>
       </div>
 
       <div class="card suggestions-layout">
         <div class="input-group">
           <label>Your Name (Optional)</label>
-          <input type="text" id="suggestionNameInput" placeholder="e.g. Gordon B." />
+          <input type="text" id="suggestionNameInput" placeholder="Type name" />
+        </div>
+        <div class="suggestion-type-row">
+          <input type="checkbox" id="isShoutOutCheckbox" />
+          <label for="isShoutOutCheckbox">This is a shout out</label>
+        </div>
+        <div class="input-group suggestion-hidden" id="shoutOutForGroup">
+          <label>Who is the shout out for</label>
+          <input type="text" id="shoutOutForInput" placeholder="Type name" />
+        </div>
+        <div class="input-group suggestion-hidden" id="shoutOutLocationGroup">
+          <label>Location</label>
+          <input type="text" id="shoutOutLocationInput" placeholder="Type location" />
         </div>
         <div class="input-group">
-          <label>Email (Optional)</label>
-          <input type="text" id="suggestionEmailInput" placeholder="e.g. you@company.com" />
-        </div>
-        <div class="input-group">
-          <label>Suggestion</label>
+          <label id="suggestionTextLabel">Suggestion</label>
           <textarea id="suggestionTextInput" placeholder="What should we add or improve?"></textarea>
         </div>
 

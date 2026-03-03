@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { google } = require('googleapis');
 const { autoUpdater } = require('electron-updater');
@@ -79,13 +79,62 @@ async function ensureSuggestionsSheet(sheets) {
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `${SUGGESTIONS_TAB_NAME}!A1:D1`,
+      range: `${SUGGESTIONS_TAB_NAME}!A1:H1`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [['Timestamp', 'Name', 'Email', 'Suggestion']],
+        values: [['Timestamp', 'Type', 'Name', 'Email', 'Shout Out For', 'Location', 'Message', 'Reactions']],
       },
     });
   }
+}
+
+function parseSheetTimestamp(rawValue) {
+  const text = String(rawValue || '').trim();
+  if (!text) return null;
+
+  const direct = new Date(text);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!match) return null;
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  let year = Number(match[3]);
+  if (year < 100) year += 2000;
+
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function parseReactionMap(rawValue) {
+  const text = String(rawValue ?? '').trim();
+  if (!text) return {};
+
+  const asNumber = Number.parseInt(text, 10);
+  if (!Number.isNaN(asNumber) && String(asNumber) === text) {
+    return { clap: Math.max(asNumber, 0) };
+  }
+
+  const map = {};
+  text.split('|').forEach((part) => {
+    const [keyRaw, valueRaw] = part.split(':');
+    const key = String(keyRaw || '').trim();
+    const value = Number.parseInt(String(valueRaw || '').trim(), 10);
+    if (!key || Number.isNaN(value) || value <= 0) return;
+    map[key] = value;
+  });
+  return map;
+}
+
+function encodeReactionMap(map) {
+  const keys = Object.keys(map || {});
+  if (keys.length === 0) return '0';
+  return keys
+    .filter((key) => Number.isFinite(map[key]) && map[key] > 0)
+    .map((key) => `${key}:${Math.floor(map[key])}`)
+    .join('|') || '0';
 }
 
 // ── IPC: Get next available code from a tab ───────────────────────────────────
@@ -194,9 +243,15 @@ ipcMain.handle('submit-suggestion', async (event, payload) => {
     const suggestion = String(payload?.suggestion || '').trim();
     const name = String(payload?.name || '').trim();
     const email = String(payload?.email || '').trim();
+    const type = String(payload?.type || 'Suggestion').trim();
+    const shoutOutFor = String(payload?.shoutOutFor || '').trim();
+    const location = String(payload?.location || '').trim();
 
     if (suggestion.length < 4) {
       return { success: false, message: 'Suggestion must be at least 4 characters.' };
+    }
+    if (type.toLowerCase() === 'shout out' && shoutOutFor.length < 2) {
+      return { success: false, message: 'Shout out recipient is required.' };
     }
 
     const sheets = await getSheetsClient();
@@ -207,16 +262,114 @@ ipcMain.handle('submit-suggestion', async (event, payload) => {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${SUGGESTIONS_TAB_NAME}!A:D`,
+      range: `${SUGGESTIONS_TAB_NAME}!A:H`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [[timestamp, name || 'Anonymous', email || '', suggestion]],
+        values: [[timestamp, type || 'Suggestion', name || 'Anonymous', email || '', shoutOutFor, location, suggestion, 0]],
       },
     });
 
     return { success: true };
   } catch (err) {
     return { success: false, message: err?.message || 'Failed to submit suggestion.' };
+  }
+});
+
+ipcMain.handle('get-recent-shout-outs', async () => {
+  try {
+    const sheets = await getSheetsClient();
+    await ensureSuggestionsSheet(sheets);
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SUGGESTIONS_TAB_NAME}!A:H`,
+    });
+
+    const rows = res.data.values || [];
+    if (rows.length <= 1) return { success: true, shoutOuts: [] };
+
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const shoutOuts = [];
+
+    for (let i = 1; i < rows.length; i += 1) {
+      const row = rows[i];
+      const timestamp = row[0] || '';
+      const type = String(row[1] || '').trim().toLowerCase();
+      const fromName = row[2] || 'Anonymous';
+      const shoutOutFor = row[4] || '';
+      const hasLocationColumn = row.length >= 7;
+      const location = hasLocationColumn ? (row[5] || '') : '';
+      const message = hasLocationColumn ? (row[6] || '') : (row[5] || '');
+      const reactionsRaw = row[7];
+      const reactions = parseReactionMap(reactionsRaw);
+
+      if (type !== 'shout out') continue;
+      if (!message) continue;
+
+      const parsedDate = parseSheetTimestamp(timestamp);
+      if (!parsedDate || parsedDate < cutoff) continue;
+
+      shoutOuts.push({
+        rowNumber: i + 1,
+        timestamp,
+        fromName,
+        shoutOutFor,
+        location,
+        message,
+        reactions,
+      });
+    }
+
+    shoutOuts.sort((a, b) => {
+      const aDate = parseSheetTimestamp(a.timestamp)?.getTime() || 0;
+      const bDate = parseSheetTimestamp(b.timestamp)?.getTime() || 0;
+      return bDate - aDate;
+    });
+
+    return { success: true, shoutOuts };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to load shout outs.', shoutOuts: [] };
+  }
+});
+
+ipcMain.handle('react-to-shout-out', async (event, payload) => {
+  try {
+    const rowNumber = Number(payload?.rowNumber);
+    const reactionTypeRaw = String(payload?.reactionType || '').trim().toLowerCase();
+    const allowedTypes = new Set(['like', 'love', 'laugh', 'clap']);
+    if (!Number.isInteger(rowNumber) || rowNumber < 2) {
+      return { success: false, message: 'Invalid shout out row.' };
+    }
+    if (!allowedTypes.has(reactionTypeRaw)) {
+      return { success: false, message: 'Invalid reaction type.' };
+    }
+
+    const sheets = await getSheetsClient();
+    await ensureSuggestionsSheet(sheets);
+
+    const currentRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SUGGESTIONS_TAB_NAME}!H${rowNumber}:H${rowNumber}`,
+    });
+
+    const currentRaw = currentRes.data.values?.[0]?.[0] ?? '0';
+    const reactionMap = parseReactionMap(currentRaw);
+    reactionMap[reactionTypeRaw] = (Number.isFinite(reactionMap[reactionTypeRaw]) ? reactionMap[reactionTypeRaw] : 0) + 1;
+    const encoded = encodeReactionMap(reactionMap);
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SUGGESTIONS_TAB_NAME}!H${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[encoded]],
+      },
+    });
+
+    return { success: true, reactions: reactionMap };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to add reaction.' };
   }
 });
 
@@ -348,6 +501,11 @@ ipcMain.handle('get-stack-ranker', async () => {
 // ── IPC: Window controls ──────────────────────────────────────────────────────
 ipcMain.on('close-app', () => { if (mainWindow) mainWindow.close(); });
 ipcMain.on('minimize-app', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.on('toggle-maximize', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+});
 
 // ── Window ────────────────────────────────────────────────────────────────────
 let mainWindow;
@@ -357,6 +515,7 @@ function setupAutoUpdater() {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  let updatePromptShown = false;
 
   autoUpdater.on('error', (err) => {
     console.error('Auto-update error:', err?.message || err);
@@ -374,8 +533,29 @@ function setupAutoUpdater() {
     console.log(`No update available. Current version: ${info.version || app.getVersion()}`);
   });
 
-  autoUpdater.on('update-downloaded', (info) => {
+  autoUpdater.on('update-downloaded', async (info) => {
     console.log(`Update downloaded: ${info.version}. Will install on app quit.`);
+
+    if (updatePromptShown) return;
+    updatePromptShown = true;
+
+    try {
+      const result = await dialog.showMessageBox(mainWindow || null, {
+        type: 'info',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        title: 'Update Ready',
+        message: `Version ${info.version} is ready to install.`,
+        detail: 'Restart now to apply the update, or choose Later to install when the app closes.',
+      });
+
+      if (result.response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    } catch (err) {
+      console.error('Failed to show update prompt:', err?.message || err);
+    }
   });
 
   // Small delay so window/UI initialization is not blocked.

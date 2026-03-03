@@ -12,6 +12,9 @@ document.querySelectorAll('.nav-item').forEach((item) => {
     if (pageId === 'page2') {
       loadStackRanker();
     }
+    if (pageId === 'home') {
+      loadRecentShoutOuts();
+    }
   });
 });
 
@@ -30,12 +33,43 @@ const notesInput = document.getElementById('notesInput');
 const stackRankerStatus = document.getElementById('stackRankerStatus');
 const refreshStackRankerBtn = document.getElementById('refreshStackRankerBtn');
 const suggestionNameInput = document.getElementById('suggestionNameInput');
-const suggestionEmailInput = document.getElementById('suggestionEmailInput');
 const suggestionTextInput = document.getElementById('suggestionTextInput');
+const suggestionTextLabel = document.getElementById('suggestionTextLabel');
+const isShoutOutCheckbox = document.getElementById('isShoutOutCheckbox');
+const shoutOutForGroup = document.getElementById('shoutOutForGroup');
+const shoutOutForInput = document.getElementById('shoutOutForInput');
+const shoutOutLocationGroup = document.getElementById('shoutOutLocationGroup');
+const shoutOutLocationInput = document.getElementById('shoutOutLocationInput');
 const suggestionStatus = document.getElementById('suggestionStatus');
 const submitSuggestionBtn = document.getElementById('submitSuggestionBtn');
+const homeShoutOutMessage = document.getElementById('homeShoutOutMessage');
+const homeShoutOutMeta = document.getElementById('homeShoutOutMeta');
+const homeShoutOutReactionCount = document.getElementById('homeShoutOutReactionCount');
+const reactLikeBtn = document.getElementById('reactLikeBtn');
+const reactLoveBtn = document.getElementById('reactLoveBtn');
+const reactLaughBtn = document.getElementById('reactLaughBtn');
+const reactClapBtn = document.getElementById('reactClapBtn');
 
 let isGenerating = false;
+let shoutOutRotationTimer = null;
+let shoutOutFadeTimer = null;
+let shoutOutRotationIndex = 0;
+let recentShoutOuts = [];
+
+const reactionConfig = [
+  { key: 'like', emoji: '👍' },
+  { key: 'love', emoji: '❤️' },
+  { key: 'laugh', emoji: '😂' },
+  { key: 'clap', emoji: '👏' },
+];
+
+function setReactionButtonsDisabled(disabled) {
+  [reactLikeBtn, reactLoveBtn, reactLaughBtn, reactClapBtn]
+    .filter(Boolean)
+    .forEach((btn) => {
+      btn.disabled = disabled;
+    });
+}
 
 function isNameValid(value) {
   return value.trim().length >= 4;
@@ -233,6 +267,123 @@ function setSuggestionStatus(msg, type = '') {
   suggestionStatus.className = `suggestion-status ${type}`.trim();
 }
 
+function updateSuggestionMode() {
+  const isShoutOut = Boolean(isShoutOutCheckbox?.checked);
+  if (shoutOutForGroup) {
+    shoutOutForGroup.classList.toggle('suggestion-hidden', !isShoutOut);
+  }
+  if (shoutOutLocationGroup) {
+    shoutOutLocationGroup.classList.toggle('suggestion-hidden', !isShoutOut);
+  }
+  if (suggestionTextLabel) {
+    suggestionTextLabel.textContent = isShoutOut ? 'Shout Out Message' : 'Suggestion';
+  }
+  if (suggestionTextInput) {
+    suggestionTextInput.placeholder = isShoutOut
+      ? 'Write the shout out you want to send...'
+      : 'What should we add or improve?';
+  }
+  if (submitSuggestionBtn) {
+    submitSuggestionBtn.textContent = isShoutOut ? 'Submit Shout Out' : 'Submit Suggestion';
+  }
+}
+
+function stopShoutOutRotation() {
+  if (shoutOutRotationTimer) {
+    clearInterval(shoutOutRotationTimer);
+    shoutOutRotationTimer = null;
+  }
+  if (shoutOutFadeTimer) {
+    clearTimeout(shoutOutFadeTimer);
+    shoutOutFadeTimer = null;
+  }
+}
+
+function renderCurrentShoutOut(withFade = false) {
+  if (!homeShoutOutMessage || !homeShoutOutMeta) return;
+
+  if (recentShoutOuts.length === 0) {
+    homeShoutOutMessage.textContent =
+      'Gordon received a shout-out for creating such an awesome in-house application to simplify our lives at Tricked Out!';
+    homeShoutOutMeta.textContent = '';
+    if (homeShoutOutReactionCount) homeShoutOutReactionCount.textContent = '';
+    setReactionButtonsDisabled(true);
+    return;
+  }
+
+  const item = recentShoutOuts[shoutOutRotationIndex % recentShoutOuts.length];
+  const applyContent = () => {
+    const recognizedName = item.shoutOutFor?.trim() || 'A team member';
+    const writtenBy = item.fromName?.trim() || 'Anonymous';
+    homeShoutOutMessage.textContent = `${recognizedName} was recognized!`;
+
+    let details = item.message || '';
+    if (item.location) {
+      details += `\nLocation: ${item.location}`;
+    }
+    details += `\n- ${writtenBy}`;
+    homeShoutOutMeta.textContent = details;
+    const reactions = item.reactions || {};
+    if (homeShoutOutReactionCount) {
+      const chips = reactionConfig
+        .map(({ key, emoji }) => {
+          const count = Number.isFinite(reactions[key]) ? reactions[key] : 0;
+          if (count <= 0) return '';
+          return `<span class="reaction-chip">${emoji} ${count}</span>`;
+        })
+        .filter(Boolean)
+        .join('');
+      homeShoutOutReactionCount.innerHTML = chips || '<span class="reaction-chip">No reactions yet</span>';
+    }
+    setReactionButtonsDisabled(false);
+  };
+
+  if (!withFade) {
+    applyContent();
+    return;
+  }
+
+  homeShoutOutMessage.classList.add('fade-out');
+  homeShoutOutMeta.classList.add('fade-out');
+  if (shoutOutFadeTimer) clearTimeout(shoutOutFadeTimer);
+  shoutOutFadeTimer = setTimeout(() => {
+    applyContent();
+    homeShoutOutMessage.classList.remove('fade-out');
+    homeShoutOutMeta.classList.remove('fade-out');
+  }, 470);
+}
+
+function startShoutOutRotation() {
+  stopShoutOutRotation();
+  if (recentShoutOuts.length <= 1) return;
+
+  shoutOutRotationTimer = setInterval(() => {
+    shoutOutRotationIndex = (shoutOutRotationIndex + 1) % recentShoutOuts.length;
+    renderCurrentShoutOut(true);
+  }, 15000);
+}
+
+async function loadRecentShoutOuts() {
+  if (!homeShoutOutMessage || !homeShoutOutMeta) return;
+
+  homeShoutOutMessage.textContent = 'Loading shout outs...';
+  homeShoutOutMeta.textContent = '';
+  stopShoutOutRotation();
+
+  try {
+    const res = await window.toaAPI.getRecentShoutOuts();
+    if (!res.success) throw new Error(res.message || 'Failed to load shout outs.');
+
+    recentShoutOuts = res.shoutOuts || [];
+    shoutOutRotationIndex = 0;
+    renderCurrentShoutOut();
+    startShoutOutRotation();
+  } catch (err) {
+    homeShoutOutMessage.textContent = `Failed to load shout outs: ${err.message}`;
+    homeShoutOutMeta.textContent = '';
+  }
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -268,34 +419,80 @@ refreshStackRankerBtn?.addEventListener('click', loadStackRanker);
 submitSuggestionBtn?.addEventListener('click', async () => {
   const suggestion = suggestionTextInput?.value.trim() || '';
   const name = suggestionNameInput?.value.trim() || '';
-  const email = suggestionEmailInput?.value.trim() || '';
+  const isShoutOut = Boolean(isShoutOutCheckbox?.checked);
+  const shoutOutFor = shoutOutForInput?.value.trim() || '';
+  const location = shoutOutLocationInput?.value.trim() || '';
+  const entryType = isShoutOut ? 'Shout Out' : 'Suggestion';
 
   if (suggestion.length < 4) {
-    setSuggestionStatus('Please enter at least 4 characters for your suggestion.', 'error');
+    setSuggestionStatus(`Please enter at least 4 characters for your ${entryType.toLowerCase()}.`, 'error');
+    return;
+  }
+  if (isShoutOut && shoutOutFor.length < 2) {
+    setSuggestionStatus('Please enter who the shout out is for.', 'error');
     return;
   }
 
   submitSuggestionBtn.disabled = true;
   submitSuggestionBtn.innerHTML = '<span class="spinner"></span>Submitting';
-  setSuggestionStatus('Submitting suggestion...');
+  setSuggestionStatus(`Submitting ${entryType.toLowerCase()}...`);
 
   try {
-    const res = await window.toaAPI.submitSuggestion({ name, email, suggestion });
+    const res = await window.toaAPI.submitSuggestion({
+      name,
+      suggestion,
+      type: entryType,
+      shoutOutFor,
+      location,
+    });
     if (!res.success) {
-      setSuggestionStatus(res.message || 'Failed to submit suggestion.', 'error');
+      setSuggestionStatus(res.message || `Failed to submit ${entryType.toLowerCase()}.`, 'error');
       return;
     }
 
-    setSuggestionStatus('Suggestion sent. Thank you!', 'success');
+    setSuggestionStatus(`${entryType} sent. Thank you!`, 'success');
     if (suggestionTextInput) suggestionTextInput.value = '';
+    if (shoutOutForInput) shoutOutForInput.value = '';
+    if (shoutOutLocationInput) shoutOutLocationInput.value = '';
+    if (isShoutOut) loadRecentShoutOuts();
   } catch (err) {
-    setSuggestionStatus(`Failed to submit suggestion: ${err.message}`, 'error');
+    setSuggestionStatus(`Failed to submit ${entryType.toLowerCase()}: ${err.message}`, 'error');
   } finally {
     submitSuggestionBtn.disabled = false;
-    submitSuggestionBtn.innerHTML = 'Submit Suggestion';
+    submitSuggestionBtn.innerHTML = isShoutOut ? 'Submit Shout Out' : 'Submit Suggestion';
   }
 });
+isShoutOutCheckbox?.addEventListener('change', updateSuggestionMode);
+async function submitShoutOutReaction(reactionType) {
+  if (recentShoutOuts.length === 0) return;
+
+  const item = recentShoutOuts[shoutOutRotationIndex % recentShoutOuts.length];
+  if (!item?.rowNumber) return;
+
+  setReactionButtonsDisabled(true);
+
+  try {
+    const res = await window.toaAPI.reactToShoutOut({ rowNumber: item.rowNumber, reactionType });
+    if (!res.success) throw new Error(res.message || 'Failed to add reaction.');
+
+    item.reactions = res.reactions || item.reactions || {};
+    renderCurrentShoutOut();
+  } catch (err) {
+    if (homeShoutOutReactionCount) {
+      homeShoutOutReactionCount.textContent = `Reaction failed: ${err.message}`;
+    }
+  } finally {
+    if (recentShoutOuts.length > 0) setReactionButtonsDisabled(false);
+  }
+}
+
+reactLikeBtn?.addEventListener('click', () => submitShoutOutReaction('like'));
+reactLoveBtn?.addEventListener('click', () => submitShoutOutReaction('love'));
+reactLaughBtn?.addEventListener('click', () => submitShoutOutReaction('laugh'));
+reactClapBtn?.addEventListener('click', () => submitShoutOutReaction('clap'));
 
 // Init
 loadTabs();
 updateGenerateButtonState();
+updateSuggestionMode();
+loadRecentShoutOuts();
