@@ -1,6 +1,6 @@
 {
   "name": "toa-companion",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Tricked Out Accessories",
   "description": "Tricked Out Accessories - POS Companion App",
   "main": "main.js",
@@ -23,7 +23,8 @@
     "productName": "TOA Companion",
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
