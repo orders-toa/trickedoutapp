@@ -231,7 +231,7 @@ ipcMain.handle('get-tabs', async () => {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
     const tabs = meta.data.sheets
       .map(s => s.properties.title)
-      .filter(t => t !== 'Used');
+      .filter(t => t !== 'Used' && t !== SUGGESTIONS_TAB_NAME);
     return { success: true, tabs };
   } catch (err) {
     return { success: false, message: err.message };
