@@ -8,7 +8,63 @@ const SHEET_ID = '1nywGhJ50rrntwoGwO9zgPaVOsEpHM1iTOG7O_pXHKrQ';
 const STACK_RANKER_SHEET_ID = '1oKJbQA12JIvNQdjNiWmd3jb2pmQytuxbRh_snGWvbRk';
 const STACK_RANKER_TAB_NAME = 'Stack Ranker';
 const SUGGESTIONS_TAB_NAME = 'Suggestions';
+const SUPPLY_ORDERS_TAB_NAME = 'Supply Orders';
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+
+const SUPPLY_ORDER_ITEMS = [
+  '70% Isopropyl',
+  '99% Isopropyl',
+  'Air Freshener Spray',
+  'Avery Labels',
+  'Baby Shampoo',
+  'Blue Tape',
+  'Box Cutter',
+  'Canned Air',
+  'Clorox Wipes',
+  'Counterfeit Pen',
+  'Hand Sanitizer',
+  'Hand Soap',
+  'Paper Towels',
+  'Pens',
+  'Printer Paper',
+  'Rubber Bands',
+  'Scissors',
+  'Sharpies',
+  'Spray Away Glass Cleaner',
+  'Install Spray Bottle',
+  'Squeegee',
+  'Stainless Steel Spray',
+  'Staples',
+  'Sticky Notes',
+  'Swiffer Duster Pad',
+  'Swiffer Wet Jet Cleaner',
+  'Swiffer Wet Jet Pads',
+  'Toilet Bowl Cleaner',
+  'Toilet Paper',
+  'Toner (Printer Ink)',
+  'Tooth Brush',
+  'Trash Bags',
+  'X-Acto Knife',
+  'Guitar Picks',
+  'TOA Black Bags',
+  'TOA White Bags',
+  'TOA White Phone Packaging',
+  'Deposit Bags',
+  'Deposit Slips',
+];
+
+const SUPPLY_ORDER_LOCATIONS = [
+  'Magic Valley',
+  'Grand Teton',
+  'Newgate',
+  'Layton',
+  'Station Park',
+  'Valley Fair',
+  'South Town',
+  'University',
+  'Provo',
+];
+const MAX_OTHER_REQUESTS = 10;
 
 function rgbToCss(color) {
   if (!color) return null;
@@ -86,6 +142,62 @@ async function ensureSuggestionsSheet(sheets) {
       },
     });
   }
+}
+
+async function ensureSupplyOrdersSheet(sheets) {
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: SHEET_ID,
+    fields: 'sheets(properties(sheetId,title))',
+  });
+
+  const existingSheet = (meta.data.sheets || []).find(
+    (s) =>
+      String(s.properties?.title || '').trim().toLowerCase() ===
+      SUPPLY_ORDERS_TAB_NAME.toLowerCase()
+  );
+
+  const headers = [
+    'Submitted At',
+    'Store',
+    'Standard Items',
+    ...Array.from({ length: MAX_OTHER_REQUESTS }, (_, idx) => `Other Request ${idx + 1}`),
+  ];
+  const lastCol = columnToLetters(headers.length);
+
+  if (existingSheet?.properties?.sheetId) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SUPPLY_ORDERS_TAB_NAME}!A1:${lastCol}1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [headers],
+      },
+    });
+    return existingSheet.properties.sheetId;
+  }
+
+  const addRes = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title: SUPPLY_ORDERS_TAB_NAME } } }],
+    },
+  });
+
+  const newSheetId = addRes.data?.replies?.[0]?.addSheet?.properties?.sheetId;
+  if (!Number.isInteger(newSheetId)) {
+    throw new Error('Failed to create Supply Orders sheet.');
+  }
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${SUPPLY_ORDERS_TAB_NAME}!A1:${lastCol}1`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [headers],
+    },
+  });
+
+  return newSheetId;
 }
 
 function parseSheetTimestamp(rawValue) {
@@ -231,7 +343,12 @@ ipcMain.handle('get-tabs', async () => {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
     const tabs = meta.data.sheets
       .map(s => s.properties.title)
-      .filter(t => t !== 'Used' && t !== SUGGESTIONS_TAB_NAME);
+      .filter(
+        (t) =>
+          t !== 'Used' &&
+          t !== SUGGESTIONS_TAB_NAME &&
+          t !== SUPPLY_ORDERS_TAB_NAME
+      );
     return { success: true, tabs };
   } catch (err) {
     return { success: false, message: err.message };
@@ -272,6 +389,95 @@ ipcMain.handle('submit-suggestion', async (event, payload) => {
     return { success: true };
   } catch (err) {
     return { success: false, message: err?.message || 'Failed to submit suggestion.' };
+  }
+});
+
+ipcMain.handle('submit-supply-order', async (event, payload) => {
+  try {
+    const store = String(payload?.store || '').trim();
+    const quantitiesRaw = payload?.quantities && typeof payload.quantities === 'object'
+      ? payload.quantities
+      : {};
+
+    if (!SUPPLY_ORDER_LOCATIONS.includes(store)) {
+      return { success: false, message: 'Please select a valid store location.' };
+    }
+
+    const quantities = {};
+    let totalQty = 0;
+
+    for (const item of SUPPLY_ORDER_ITEMS) {
+      const raw = quantitiesRaw[item];
+      const qtyNum = Number.parseInt(String(raw ?? ''), 10);
+      const qty = Number.isNaN(qtyNum) ? 0 : Math.max(0, qtyNum);
+      quantities[item] = qty;
+      totalQty += qty;
+    }
+
+    const otherRaw = Array.isArray(payload?.otherRequests) ? payload.otherRequests : [];
+    const otherRequests = [];
+    otherRaw.forEach((entry) => {
+      if (otherRequests.length >= MAX_OTHER_REQUESTS) return;
+      const description = String(entry?.description || '').trim();
+      const qtyRaw = Number.parseInt(String(entry?.qty ?? ''), 10);
+      const qty = Number.isNaN(qtyRaw) ? 0 : Math.max(0, qtyRaw);
+      if (!description || qty <= 0) return;
+      otherRequests.push(qty > 1 ? `${description} (x${qty})` : description);
+    });
+
+    if (totalQty <= 0 && otherRequests.length === 0) {
+      return { success: false, message: 'Add at least one item before submitting.' };
+    }
+
+    const sheets = await getSheetsClient();
+    const sheetId = await ensureSupplyOrdersSheet(sheets);
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        requests: [
+          {
+            insertDimension: {
+              range: {
+                sheetId,
+                dimension: 'ROWS',
+                startIndex: 1,
+                endIndex: 2,
+              },
+              inheritFromBefore: false,
+            },
+          },
+        ],
+      },
+    });
+
+    const now = new Date();
+    const submittedAt = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+    const standardItemsSummary = SUPPLY_ORDER_ITEMS
+      .filter((item) => quantities[item] > 0)
+      .map((item) => `${item} - ${quantities[item]}`)
+      .join(', ');
+
+    const rowValues = [
+      submittedAt,
+      store,
+      standardItemsSummary,
+      ...Array.from({ length: MAX_OTHER_REQUESTS }, (_, idx) => otherRequests[idx] || ''),
+    ];
+    const lastCol = columnToLetters(rowValues.length);
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SUPPLY_ORDERS_TAB_NAME}!A2:${lastCol}2`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [rowValues],
+      },
+    });
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to submit order.' };
   }
 });
 

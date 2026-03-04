@@ -49,12 +49,83 @@ const reactLikeBtn = document.getElementById('reactLikeBtn');
 const reactLoveBtn = document.getElementById('reactLoveBtn');
 const reactLaughBtn = document.getElementById('reactLaughBtn');
 const reactClapBtn = document.getElementById('reactClapBtn');
+const supplyItemGrid = document.getElementById('supplyItemGrid');
+const addAllToCartBtn = document.getElementById('addAllToCartBtn');
+const clearCatalogQtyBtn = document.getElementById('clearCatalogQtyBtn');
+const otherRequestInput = document.getElementById('otherRequestInput');
+const addOtherRequestBtn = document.getElementById('addOtherRequestBtn');
+const openCartBtn = document.getElementById('openCartBtn');
+const cartCountBadge = document.getElementById('cartCountBadge');
+const supplyStepCatalog = document.getElementById('supplyStepCatalog');
+const supplyStepCart = document.getElementById('supplyStepCart');
+const supplyStepStore = document.getElementById('supplyStepStore');
+const supplyStepSuccess = document.getElementById('supplyStepSuccess');
+const cartEmptyMsg = document.getElementById('cartEmptyMsg');
+const cartTable = document.getElementById('cartTable');
+const cartTableBody = document.getElementById('cartTableBody');
+const backToCatalogBtn = document.getElementById('backToCatalogBtn');
+const proceedToStoreBtn = document.getElementById('proceedToStoreBtn');
+const backToCartBtn = document.getElementById('backToCartBtn');
+const submitSupplyOrderBtn = document.getElementById('submitSupplyOrderBtn');
+const newSupplyOrderBtn = document.getElementById('newSupplyOrderBtn');
+const supplySuccessMessage = document.getElementById('supplySuccessMessage');
+const supplyStoreSelect = document.getElementById('supplyStoreSelect');
+const orderSummary = document.getElementById('orderSummary');
+const supplyCatalogStatus = document.getElementById('supplyCatalogStatus');
+const supplyCartStatus = document.getElementById('supplyCartStatus');
+const supplySubmitStatus = document.getElementById('supplySubmitStatus');
 
 let isGenerating = false;
 let shoutOutRotationTimer = null;
 let shoutOutFadeTimer = null;
 let shoutOutRotationIndex = 0;
 let recentShoutOuts = [];
+let supplyCart = {};
+let supplyOtherRequests = [];
+let nextOtherRequestId = 1;
+
+const SUPPLY_ITEMS = [
+  '70% Isopropyl',
+  '99% Isopropyl',
+  'Air Freshener Spray',
+  'Avery Labels',
+  'Baby Shampoo',
+  'Blue Tape',
+  'Box Cutter',
+  'Canned Air',
+  'Clorox Wipes',
+  'Counterfeit Pen',
+  'Hand Sanitizer',
+  'Hand Soap',
+  'Paper Towels',
+  'Pens',
+  'Printer Paper',
+  'Rubber Bands',
+  'Scissors',
+  'Sharpies',
+  'Spray Away Glass Cleaner',
+  'Install Spray Bottle',
+  'Squeegee',
+  'Stainless Steel Spray',
+  'Staples',
+  'Sticky Notes',
+  'Swiffer Duster Pad',
+  'Swiffer Wet Jet Cleaner',
+  'Swiffer Wet Jet Pads',
+  'Toilet Bowl Cleaner',
+  'Toilet Paper',
+  'Toner (Printer Ink)',
+  'Tooth Brush',
+  'Trash Bags',
+  'X-Acto Knife',
+  'Guitar Picks',
+  'TOA Black Bags',
+  'TOA White Bags',
+  'TOA White Phone Packaging',
+  'Deposit Bags',
+  'Deposit Slips',
+];
+const MAX_OTHER_REQUESTS = 10;
 
 const reactionConfig = [
   { key: 'like', emoji: '👍' },
@@ -384,6 +455,344 @@ async function loadRecentShoutOuts() {
   }
 }
 
+function setSupplyStatus(target, msg, type = '') {
+  if (!target) return;
+  target.textContent = msg;
+  target.className = `supply-status ${type}`.trim();
+}
+
+function getSupplyCartTotalQty() {
+  const standardTotal = Object.values(supplyCart).reduce((sum, qty) => sum + qty, 0);
+  const otherTotal = supplyOtherRequests.reduce((sum, row) => sum + row.qty, 0);
+  return standardTotal + otherTotal;
+}
+
+function updateCartBadge() {
+  if (!cartCountBadge) return;
+  cartCountBadge.textContent = String(getSupplyCartTotalQty());
+}
+
+function showSupplyStep(step) {
+  [supplyStepCatalog, supplyStepCart, supplyStepStore, supplyStepSuccess]
+    .filter(Boolean)
+    .forEach((el) => el.classList.add('hidden'));
+
+  if (step === 'catalog') supplyStepCatalog?.classList.remove('hidden');
+  if (step === 'cart') supplyStepCart?.classList.remove('hidden');
+  if (step === 'store') supplyStepStore?.classList.remove('hidden');
+  if (step === 'success') supplyStepSuccess?.classList.remove('hidden');
+}
+
+function renderSupplyCatalog() {
+  if (!supplyItemGrid) return;
+  supplyItemGrid.innerHTML = SUPPLY_ITEMS.map((item) => `
+    <div class="supply-item-card">
+      <div class="supply-item-name">${escapeHtml(item)}</div>
+      <input
+        type="number"
+        min="0"
+        step="1"
+        class="supply-qty-input catalog-qty-input"
+        data-item="${escapeHtml(item)}"
+        value="0"
+      />
+    </div>
+  `).join('');
+}
+
+function getCatalogQuantities() {
+  const quantities = {};
+  document.querySelectorAll('.catalog-qty-input').forEach((input) => {
+    const item = String(input.dataset.item || '');
+    const value = Number.parseInt(input.value, 10);
+    if (!item) return;
+    quantities[item] = Number.isNaN(value) ? 0 : Math.max(0, value);
+  });
+  return quantities;
+}
+
+function renderCart() {
+  if (!cartTableBody || !cartEmptyMsg || !cartTable) return;
+
+  const standardEntries = Object.entries(supplyCart)
+    .filter(([, qty]) => qty > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const otherEntries = supplyOtherRequests.filter((row) => row.qty > 0);
+
+  if (standardEntries.length === 0 && otherEntries.length === 0) {
+    cartEmptyMsg.style.display = '';
+    cartTable.style.display = 'none';
+    cartTableBody.innerHTML = '';
+    setSupplyStatus(supplyCartStatus, '');
+    updateCartBadge();
+    return;
+  }
+
+  cartEmptyMsg.style.display = 'none';
+  cartTable.style.display = '';
+  const standardRows = standardEntries.map(([item, qty]) => `
+      <tr>
+        <td>${escapeHtml(item)}</td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            class="supply-qty-input cart-qty-input"
+            data-kind="standard"
+            data-key="${escapeHtml(item)}"
+            value="${qty}"
+          />
+        </td>
+        <td>
+          <button class="btn btn-secondary cart-remove-btn" data-kind="standard" data-key="${escapeHtml(item)}">Remove</button>
+        </td>
+      </tr>
+    `)
+    .join('');
+  const otherRows = otherEntries.map((row) => `
+      <tr>
+        <td>Other: ${escapeHtml(row.description)}</td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            class="supply-qty-input cart-qty-input"
+            data-kind="other"
+            data-key="${row.id}"
+            value="${row.qty}"
+          />
+        </td>
+        <td>
+          <button class="btn btn-secondary cart-remove-btn" data-kind="other" data-key="${row.id}">Remove</button>
+        </td>
+      </tr>
+    `).join('');
+  cartTableBody.innerHTML = `${standardRows}${otherRows}`;
+  updateCartBadge();
+}
+
+function renderOrderSummary() {
+  if (!orderSummary) return;
+
+  const standardEntries = Object.entries(supplyCart).filter(([, qty]) => qty > 0);
+  const otherEntries = supplyOtherRequests.filter((row) => row.qty > 0);
+  if (standardEntries.length === 0 && otherEntries.length === 0) {
+    orderSummary.textContent = 'No items selected.';
+    return;
+  }
+
+  const standardSummary = standardEntries
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([item, qty]) => `${item}: ${qty}`)
+    .join(' | ');
+  const otherSummary = otherEntries
+    .map((row) => `Other (${row.description}): ${row.qty}`)
+    .join(' | ');
+  const fullSummary = [standardSummary, otherSummary].filter(Boolean).join(' | ');
+  orderSummary.textContent = `Items: ${fullSummary}`;
+}
+
+function resetSupplyOrderFlow() {
+  supplyCart = {};
+  supplyOtherRequests = [];
+  nextOtherRequestId = 1;
+  document.querySelectorAll('.catalog-qty-input').forEach((input) => {
+    input.value = '0';
+  });
+  if (otherRequestInput) otherRequestInput.value = '';
+  if (supplyStoreSelect) supplyStoreSelect.value = '';
+  if (supplySuccessMessage) supplySuccessMessage.textContent = 'Your order was submitted.';
+  setSupplyStatus(supplyCatalogStatus, '');
+  setSupplyStatus(supplyCartStatus, '');
+  setSupplyStatus(supplySubmitStatus, '');
+  renderCart();
+  renderOrderSummary();
+  showSupplyStep('catalog');
+}
+
+function initSupplyOrders() {
+  if (!supplyItemGrid) return;
+
+  renderSupplyCatalog();
+  renderCart();
+  renderOrderSummary();
+  updateCartBadge();
+
+  openCartBtn?.addEventListener('click', () => {
+    renderCart();
+    showSupplyStep('cart');
+  });
+
+  addAllToCartBtn?.addEventListener('click', () => {
+    const source = getCatalogQuantities();
+    let addedItems = 0;
+
+    SUPPLY_ITEMS.forEach((item) => {
+      const qty = source[item] || 0;
+      if (qty <= 0) return;
+      supplyCart[item] = (supplyCart[item] || 0) + qty;
+      addedItems += 1;
+    });
+
+    if (addedItems === 0) {
+      setSupplyStatus(supplyCatalogStatus, 'Enter quantities greater than 0 before adding to cart.', 'error');
+      return;
+    }
+
+    setSupplyStatus(supplyCatalogStatus, `Added ${addedItems} item types to cart.`, 'success');
+    renderCart();
+    renderOrderSummary();
+  });
+
+  clearCatalogQtyBtn?.addEventListener('click', () => {
+    document.querySelectorAll('.catalog-qty-input').forEach((input) => {
+      input.value = '0';
+    });
+    setSupplyStatus(supplyCatalogStatus, 'Catalog quantities cleared.');
+  });
+
+  addOtherRequestBtn?.addEventListener('click', () => {
+    const description = String(otherRequestInput?.value || '').trim();
+    if (description.length < 2) {
+      setSupplyStatus(supplyCatalogStatus, 'Enter a description for the other request.', 'error');
+      return;
+    }
+    if (supplyOtherRequests.length >= MAX_OTHER_REQUESTS) {
+      setSupplyStatus(supplyCatalogStatus, `Only ${MAX_OTHER_REQUESTS} other requests can be added per order.`, 'error');
+      return;
+    }
+
+    supplyOtherRequests.push({
+      id: nextOtherRequestId++,
+      description,
+      qty: 1,
+    });
+    if (otherRequestInput) otherRequestInput.value = '';
+    setSupplyStatus(supplyCatalogStatus, 'Other request added to cart.', 'success');
+    renderCart();
+    renderOrderSummary();
+  });
+
+  backToCatalogBtn?.addEventListener('click', () => {
+    showSupplyStep('catalog');
+  });
+
+  proceedToStoreBtn?.addEventListener('click', () => {
+    if (getSupplyCartTotalQty() <= 0) {
+      setSupplyStatus(supplyCartStatus, 'Your cart is empty.', 'error');
+      return;
+    }
+    setSupplyStatus(supplyCartStatus, '');
+    renderOrderSummary();
+    showSupplyStep('store');
+  });
+
+  backToCartBtn?.addEventListener('click', () => {
+    renderCart();
+    showSupplyStep('cart');
+  });
+
+  cartTableBody?.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!target?.classList?.contains('cart-qty-input')) return;
+    const kind = String(target.dataset.kind || '');
+    const key = String(target.dataset.key || '');
+    const value = Number.parseInt(target.value, 10);
+    const qty = Number.isNaN(value) ? 0 : Math.max(0, value);
+    if (kind === 'standard') {
+      if (!key) return;
+      if (qty <= 0) delete supplyCart[key];
+      else supplyCart[key] = qty;
+    } else if (kind === 'other') {
+      const id = Number.parseInt(key, 10);
+      if (!Number.isInteger(id)) return;
+      const row = supplyOtherRequests.find((entry) => entry.id === id);
+      if (!row) return;
+      if (qty <= 0) {
+        supplyOtherRequests = supplyOtherRequests.filter((entry) => entry.id !== id);
+      } else {
+        row.qty = qty;
+      }
+    } else {
+      return;
+    }
+    renderCart();
+    renderOrderSummary();
+  });
+
+  cartTableBody?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!target?.classList?.contains('cart-remove-btn')) return;
+    const kind = String(target.dataset.kind || '');
+    const key = String(target.dataset.key || '');
+    if (kind === 'standard') {
+      if (!key) return;
+      delete supplyCart[key];
+    } else if (kind === 'other') {
+      const id = Number.parseInt(key, 10);
+      if (!Number.isInteger(id)) return;
+      supplyOtherRequests = supplyOtherRequests.filter((entry) => entry.id !== id);
+    } else {
+      return;
+    }
+    renderCart();
+    renderOrderSummary();
+  });
+
+  submitSupplyOrderBtn?.addEventListener('click', async () => {
+    if (!window.toaAPI?.submitSupplyOrder) {
+      setSupplyStatus(supplySubmitStatus, 'This app version does not support supply orders yet.', 'error');
+      return;
+    }
+
+    if (getSupplyCartTotalQty() <= 0) {
+      setSupplyStatus(supplySubmitStatus, 'Your cart is empty.', 'error');
+      return;
+    }
+
+    const store = String(supplyStoreSelect?.value || '').trim();
+    if (!store) {
+      setSupplyStatus(supplySubmitStatus, 'Please select a store location.', 'error');
+      return;
+    }
+
+    submitSupplyOrderBtn.disabled = true;
+    submitSupplyOrderBtn.innerHTML = '<span class="spinner"></span>Submitting';
+    setSupplyStatus(supplySubmitStatus, 'Submitting order...');
+
+    try {
+      const res = await window.toaAPI.submitSupplyOrder({
+        store,
+        quantities: supplyCart,
+        otherRequests: supplyOtherRequests,
+      });
+
+      if (!res.success) {
+        setSupplyStatus(supplySubmitStatus, res.message || 'Failed to submit order.', 'error');
+        return;
+      }
+
+      if (supplySuccessMessage) {
+        const submittedAt = new Date().toLocaleString();
+        supplySuccessMessage.textContent = `Your order was submitted on ${submittedAt}.`;
+      }
+      setSupplyStatus(supplySubmitStatus, 'Order submitted.', 'success');
+      showSupplyStep('success');
+    } catch (err) {
+      setSupplyStatus(supplySubmitStatus, `Failed to submit order: ${err.message}`, 'error');
+    } finally {
+      submitSupplyOrderBtn.disabled = false;
+      submitSupplyOrderBtn.innerHTML = 'Submit Order';
+    }
+  });
+
+  newSupplyOrderBtn?.addEventListener('click', () => {
+    resetSupplyOrderFlow();
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -496,3 +905,4 @@ loadTabs();
 updateGenerateButtonState();
 updateSuggestionMode();
 loadRecentShoutOuts();
+initSupplyOrders();

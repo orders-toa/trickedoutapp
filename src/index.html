@@ -88,13 +88,16 @@
     .sidebar-logo {
       padding: 24px 20px 32px;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .sidebar-logo .brand-logo {
-      width: 100%;
-      max-width: 210px;
-      height: auto;
+      width: 110px;
+      height: 110px;
       display: block;
+      object-fit: contain;
     }
 
     .sidebar-logo .sub {
@@ -188,6 +191,23 @@
     /* ── Page header ── */
     .page-header {
       margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .page-header > div {
+      order: 1;
+    }
+
+    .page-header-logo {
+      width: 300px;
+      height: auto;
+      display: block;
+      object-fit: contain;
+      flex-shrink: 0;
+      order: 2;
+      margin-left: auto;
     }
 
     .page-header h1 {
@@ -567,6 +587,140 @@
     .suggestion-status.success { color: var(--success); }
     .suggestion-status.error { color: var(--accent2); }
 
+    /* Supply Orders */
+    .supply-shell {
+      max-width: 980px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .supply-cart-bar {
+      display: flex;
+      justify-content: flex-start;
+    }
+
+    .supply-cart-btn {
+      width: auto;
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      font-size: 11px;
+    }
+
+    .supply-step.hidden {
+      display: none;
+    }
+
+    .supply-step-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .supply-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+
+    .supply-item-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .supply-item-name {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .supply-qty-input {
+      width: 80px;
+      background: #0e0e0e;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px;
+      font-size: 13px;
+    }
+
+    .supply-qty-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .supply-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+    }
+
+    .supply-table th,
+    .supply-table td {
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 8px;
+      font-size: 13px;
+    }
+
+    .supply-empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 8px 0 2px;
+    }
+
+    .supply-inline {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .supply-other-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .supply-other-input {
+      flex: 1;
+      background: #0e0e0e;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .supply-other-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .supply-other-btn {
+      width: auto;
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      font-size: 11px;
+    }
+
+    .supply-status {
+      margin-top: 10px;
+      min-height: 18px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .supply-status.success { color: var(--success); }
+    .supply-status.error { color: var(--accent2); }
+
     /* Status message */
     .status-msg {
       margin-top: 12px;
@@ -724,6 +878,19 @@
     }
     .conn-dot.connected { background: var(--success); box-shadow: 0 0 6px rgba(255, 255, 255, 0.45); }
     .conn-dot.error { background: var(--accent2); }
+
+    @media (max-width: 900px) {
+      .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .page-header-logo {
+        width: 220px;
+        margin-left: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -742,15 +909,14 @@
     <div class="sidebar-logo">
       <img
         class="brand-logo"
-        src="../assets/HR-TOA-Logo-FINAL-OL-for-Black.jpg"
+        src="../assets/icon-256.png"
         alt="Tricked Out Accessories logo"
       />
       <div class="sub">RQ Companion</div>
     </div>
-
     <div class="nav-items">
       <div class="nav-item active" data-page="home">
-        <span class="nav-icon">⌂</span>
+        <span class="nav-icon">H</span>
         Home
       </div>
       <div class="nav-item" data-page="discounts">
@@ -758,16 +924,19 @@
         Override Codes
       </div>
       <div class="nav-item" data-page="page2">
-        <span class="nav-icon">📋</span>
+        <span class="nav-icon">R</span>
         Stack Ranker
       </div>
+      <div class="nav-item" data-page="supplies">
+        <span class="nav-icon">[]</span>
+        Supply Orders
+      </div>
       <div class="nav-item" data-page="page3">
-        <span class="nav-icon">📊</span>
+        <span class="nav-icon">P3</span>
         Page 3
         <span class="nav-badge">Soon</span>
       </div>
     </div>
-
     <div class="sidebar-bottom-nav">
       <div class="nav-item" data-page="suggestions">
         <span class="nav-icon">S</span>
@@ -788,8 +957,11 @@
 
     <div class="page active" id="page-home">
       <div class="page-header">
-        <h1>Home</h1>
-        <p>Welcome to RQ Companion</p>
+        <img class="page-header-logo" src="../assets/HR-TOA-Logo-FINAL-OL-for-Black.jpg" alt="Tricked Out Accessories logo" />
+        <div>
+          <h1>Home</h1>
+          <p>Welcome to RQ Companion</p>
+        </div>
       </div>
 
       <div class="home-grid">
@@ -824,8 +996,11 @@
     <!-- Override Codes Page -->
     <div class="page" id="page-discounts">
       <div class="page-header">
-        <h1>Override Codes</h1>
-        <p>Select a code type then generate one for your customer</p>
+        <img class="page-header-logo" src="../assets/HR-TOA-Logo-FINAL-OL-for-Black.jpg" alt="Tricked Out Accessories logo" />
+        <div>
+          <h1>Override Codes</h1>
+          <p>Select a code type then generate one for your customer</p>
+        </div>
       </div>
 
       <div class="discount-grid">
@@ -875,8 +1050,11 @@
     <!-- Stack Ranker Page -->
     <div class="page" id="page-page2">
       <div class="page-header">
-        <h1>Stack Ranker</h1>
-        <p>View-only stack ranker table</p>
+        <img class="page-header-logo" src="../assets/HR-TOA-Logo-FINAL-OL-for-Black.jpg" alt="Tricked Out Accessories logo" />
+        <div>
+          <h1>Stack Ranker</h1>
+          <p>View-only stack ranker table</p>
+        </div>
       </div>
 
       <div class="stack-ranker-card">
@@ -893,16 +1071,110 @@
     <!-- Page 3 placeholder -->
     <div class="page" id="page-page3">
       <div class="coming-soon">
-        <div class="icon">📊</div>
+        <div class="icon">P3</div>
         <h2>Coming Soon</h2>
         <p>This page is not yet configured</p>
       </div>
     </div>
 
+    <div class="page" id="page-supplies">
+      <div class="page-header">
+        <img class="page-header-logo" src="../assets/HR-TOA-Logo-FINAL-OL-for-Black.jpg" alt="Tricked Out Accessories logo" />
+        <div>
+          <h1>Supply Orders</h1>
+          <p>Build and submit operational shelf supply orders</p>
+        </div>
+      </div>
+
+      <div class="supply-shell">
+        <div class="supply-cart-bar">
+          <button class="btn btn-secondary supply-cart-btn" id="openCartBtn">
+            View Cart (<span id="cartCountBadge">0</span>)
+          </button>
+        </div>
+
+        <div class="card supply-step" id="supplyStepCatalog">
+          <div class="supply-step-title">Step 1 - Select Item Quantities</div>
+          <div class="supply-inline">
+            <button class="btn btn-primary" id="addAllToCartBtn">Add All Items To Cart</button>
+            <button class="btn btn-secondary" id="clearCatalogQtyBtn">Clear Quantities</button>
+          </div>
+          <div class="supply-other-row">
+            <input
+              type="text"
+              id="otherRequestInput"
+              class="supply-other-input"
+              placeholder="Other: describe requested item..."
+            />
+            <button class="btn btn-secondary supply-other-btn" id="addOtherRequestBtn">Add To Cart</button>
+          </div>
+          <div class="supply-grid" id="supplyItemGrid"></div>
+          <div class="supply-status" id="supplyCatalogStatus"></div>
+        </div>
+
+        <div class="card supply-step hidden" id="supplyStepCart">
+          <div class="supply-step-title">Step 2 - Review Cart</div>
+          <div id="cartEmptyMsg" class="supply-empty">Your cart is empty.</div>
+          <table class="supply-table" id="cartTable">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="width: 120px;">Qty</th>
+                <th style="width: 80px;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="cartTableBody"></tbody>
+          </table>
+          <div class="actions">
+            <button class="btn btn-secondary" id="backToCatalogBtn">Back</button>
+            <button class="btn btn-primary" id="proceedToStoreBtn">Proceed</button>
+          </div>
+          <div class="supply-status" id="supplyCartStatus"></div>
+        </div>
+
+        <div class="card supply-step hidden" id="supplyStepStore">
+          <div class="supply-step-title">Step 3 - Store + Submit</div>
+          <div class="input-group">
+            <label>Store Location</label>
+            <select id="supplyStoreSelect" class="supply-qty-input" style="width: 100%;">
+              <option value="">Select a store...</option>
+              <option>Magic Valley</option>
+              <option>Grand Teton</option>
+              <option>Newgate</option>
+              <option>Layton</option>
+              <option>Station Park</option>
+              <option>Valley Fair</option>
+              <option>South Town</option>
+              <option>University</option>
+              <option>Provo</option>
+            </select>
+          </div>
+          <div class="card-label">Order Summary</div>
+          <div id="orderSummary" class="supply-empty">No items selected.</div>
+          <div class="actions">
+            <button class="btn btn-secondary" id="backToCartBtn">Back</button>
+            <button class="btn btn-primary" id="submitSupplyOrderBtn">Submit Order</button>
+          </div>
+          <div class="supply-status" id="supplySubmitStatus"></div>
+        </div>
+
+        <div class="card supply-step hidden" id="supplyStepSuccess">
+          <div class="supply-step-title">Order Submitted</div>
+          <p id="supplySuccessMessage" style="color: var(--text); font-size: 14px;">Your order was submitted.</p>
+          <div class="actions">
+            <button class="btn btn-primary" id="newSupplyOrderBtn">Create Another Order</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-suggestions">
       <div class="page-header">
-        <h1>Suggestions &amp; Shout Outs</h1>
-        <p>Send suggestions and shout outs directly to the team</p>
+        <img class="page-header-logo" src="../assets/HR-TOA-Logo-FINAL-OL-for-Black.jpg" alt="Tricked Out Accessories logo" />
+        <div>
+          <h1>Suggestions &amp; Shout Outs</h1>
+          <p>Send suggestions and shout outs directly to the team</p>
+        </div>
       </div>
 
       <div class="card suggestions-layout">
@@ -939,4 +1211,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-

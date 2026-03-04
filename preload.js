@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('toaAPI', {
   getTabs: () => ipcRenderer.invoke('get-tabs'),
   getStackRanker: () => ipcRenderer.invoke('get-stack-ranker'),
+  submitSupplyOrder: (data) => ipcRenderer.invoke('submit-supply-order', data),
   getRecentShoutOuts: () => ipcRenderer.invoke('get-recent-shout-outs'),
   reactToShoutOut: (data) => ipcRenderer.invoke('react-to-shout-out', data),
   getNextCode: (tabName) => ipcRenderer.invoke('get-next-code', tabName),
