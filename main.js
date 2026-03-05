@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { google } = require('googleapis');
 const { autoUpdater } = require('electron-updater');
 
@@ -7,9 +8,24 @@ const { autoUpdater } = require('electron-updater');
 const SHEET_ID = '1nywGhJ50rrntwoGwO9zgPaVOsEpHM1iTOG7O_pXHKrQ';
 const STACK_RANKER_SHEET_ID = '1oKJbQA12JIvNQdjNiWmd3jb2pmQytuxbRh_snGWvbRk';
 const STACK_RANKER_TAB_NAME = 'Stack Ranker';
+const SALES_REPORT_TAB_NAME = 'S/P Month to Date';
+const SALES_REPORT_STORE_COL_INDEX = 1; // Column B
+const SALES_REPORT_PRODUCT_COL_INDEX = 4; // Column E
+const SALES_REPORT_QTY_COL_INDEX = 7; // Column H
+const SALES_REPORT_NET_PROFIT_COL_INDEX = 13; // Column N
+const SALES_REPORT_EMPLOYEE_COL_INDEX = 2; // Column C
+const MAX_EMPLOYEE_HIGHLIGHTS = 6;
+const COMPANY_TOP_PRODUCTS_FOR_EMPLOYEE_HIGHLIGHTS = 20;
+const EMPLOYEE_HIGHLIGHT_MAX_TOP_PERCENT = 50;
+const OVERRIDE_CODE_TAB_ALLOWLIST = ['Apple Pay', 'Refund', 'Discount'];
 const SUGGESTIONS_TAB_NAME = 'Suggestions';
 const SUPPLY_ORDERS_TAB_NAME = 'Supply Orders';
-const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+const DEFAULT_CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+const employeeHighlightsCache = {
+  key: '',
+  expiresAt: 0,
+  data: null,
+};
 
 const SUPPLY_ORDER_ITEMS = [
   '70% Isopropyl',
@@ -104,8 +120,17 @@ function columnToLetters(column) {
 }
 
 async function getSheetsClient() {
+  const envCredentialsPath = String(process.env.TOA_GOOGLE_CREDENTIALS || '').trim();
+  const credentialsPath = envCredentialsPath || DEFAULT_CREDENTIALS_PATH;
+  if (!fs.existsSync(credentialsPath)) {
+    throw new Error(
+      `Google credentials file not found at "${credentialsPath}". ` +
+      'Place credentials.json in the app root or set TOA_GOOGLE_CREDENTIALS to the full file path.'
+    );
+  }
+
   const auth = new google.auth.GoogleAuth({
-    keyFile: CREDENTIALS_PATH,
+    keyFile: credentialsPath,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
   const authClient = await auth.getClient();
@@ -249,6 +274,129 @@ function encodeReactionMap(map) {
     .join('|') || '0';
 }
 
+function escapeSheetTitleForA1(title) {
+  return `'${String(title || '').replace(/'/g, "''")}'`;
+}
+
+function buildSheetRange(title, a1Range) {
+  return `${escapeSheetTitleForA1(title)}!${a1Range}`;
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function parseQuantity(raw) {
+  const cleaned = String(raw ?? '')
+    .replace(/,/g, '')
+    .trim();
+  const qty = Number.parseFloat(cleaned);
+  if (!Number.isFinite(qty)) return 0;
+  return qty > 0 ? qty : 0;
+}
+
+function parseCurrency(raw) {
+  const cleaned = String(raw ?? '')
+    .replace(/[$,]/g, '')
+    .trim();
+  const value = Number.parseFloat(cleaned);
+  if (!Number.isFinite(value)) return 0;
+  return value;
+}
+
+function getEmployeeHighlightBucket(productName) {
+  const text = String(productName || '').toLowerCase();
+  if (text.includes('glass install')) return 'Glass Install';
+  if (text.includes('lens cover')) return 'Lens Cover';
+  return String(productName || '').trim();
+}
+
+async function getSalesAggregateData(sheets, tabTitle) {
+  const cacheKey = `${STACK_RANKER_SHEET_ID}:${tabTitle}`;
+  if (employeeHighlightsCache.key === cacheKey && Date.now() < employeeHighlightsCache.expiresAt) {
+    return employeeHighlightsCache.data;
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: STACK_RANKER_SHEET_ID,
+    range: buildSheetRange(tabTitle, 'A:N'),
+  });
+  const rows = res.data.values || [];
+
+  const companyTotalsByProduct = new Map();
+  const employeeProductTotals = new Map();
+  const overallByEmployee = new Map();
+  const employeeInvoiceIds = new Map();
+  const overallByStore = new Map();
+  const netProfitByStore = new Map();
+  const storeProductTotals = new Map();
+  const storeEmployees = new Map();
+  const storeInvoiceIds = new Map();
+  const storeDisplayNames = new Map();
+  let companyTotalQty = 0;
+
+  rows.forEach((row) => {
+    const invoiceId = String(row?.[0] || '').trim();
+    const storeName = String(row?.[SALES_REPORT_STORE_COL_INDEX] || '').trim();
+    const storeKey = normalizeName(storeName);
+    const employeeName = String(row?.[SALES_REPORT_EMPLOYEE_COL_INDEX] || '').trim();
+    const employeeKey = normalizeName(employeeName);
+    const product = String(row?.[SALES_REPORT_PRODUCT_COL_INDEX] || '').trim();
+    const qty = parseQuantity(row?.[SALES_REPORT_QTY_COL_INDEX]);
+    const netProfit = parseCurrency(row?.[SALES_REPORT_NET_PROFIT_COL_INDEX]);
+
+    if (!employeeKey || !product || qty <= 0) return;
+
+    companyTotalQty += qty;
+    companyTotalsByProduct.set(product, (companyTotalsByProduct.get(product) || 0) + qty);
+    overallByEmployee.set(employeeKey, (overallByEmployee.get(employeeKey) || 0) + qty);
+    if (!employeeInvoiceIds.has(employeeKey)) employeeInvoiceIds.set(employeeKey, new Set());
+    if (invoiceId) employeeInvoiceIds.get(employeeKey).add(invoiceId);
+
+    if (!employeeProductTotals.has(employeeKey)) employeeProductTotals.set(employeeKey, new Map());
+    const productMap = employeeProductTotals.get(employeeKey);
+    productMap.set(product, (productMap.get(product) || 0) + qty);
+
+    if (storeKey) {
+      if (!storeDisplayNames.has(storeKey)) storeDisplayNames.set(storeKey, storeName);
+      overallByStore.set(storeKey, (overallByStore.get(storeKey) || 0) + qty);
+      netProfitByStore.set(storeKey, (netProfitByStore.get(storeKey) || 0) + netProfit);
+
+      if (!storeProductTotals.has(storeKey)) storeProductTotals.set(storeKey, new Map());
+      const storeProductMap = storeProductTotals.get(storeKey);
+      storeProductMap.set(product, (storeProductMap.get(product) || 0) + qty);
+
+      if (!storeEmployees.has(storeKey)) storeEmployees.set(storeKey, new Set());
+      storeEmployees.get(storeKey).add(employeeKey);
+
+      if (!storeInvoiceIds.has(storeKey)) storeInvoiceIds.set(storeKey, new Set());
+      if (invoiceId) storeInvoiceIds.get(storeKey).add(invoiceId);
+    }
+  });
+
+  const aggregate = {
+    companyTotalsByProduct,
+    employeeProductTotals,
+    overallByEmployee,
+    employeeInvoiceIds,
+    overallByStore,
+    netProfitByStore,
+    storeProductTotals,
+    storeEmployees,
+    storeInvoiceIds,
+    storeDisplayNames,
+    companyTotalQty,
+  };
+
+  employeeHighlightsCache.key = cacheKey;
+  employeeHighlightsCache.expiresAt = Date.now() + 60 * 1000;
+  employeeHighlightsCache.data = aggregate;
+  return aggregate;
+}
+
 // ── IPC: Get next available code from a tab ───────────────────────────────────
 ipcMain.handle('get-next-code', async (event, tabName) => {
   try {
@@ -341,14 +489,17 @@ ipcMain.handle('get-tabs', async () => {
   try {
     const sheets = await getSheetsClient();
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
-    const tabs = meta.data.sheets
-      .map(s => s.properties.title)
-      .filter(
-        (t) =>
-          t !== 'Used' &&
-          t !== SUGGESTIONS_TAB_NAME &&
-          t !== SUPPLY_ORDERS_TAB_NAME
-      );
+    const tabsByNormalized = new Map(
+      (meta.data.sheets || [])
+        .map((s) => String(s.properties?.title || '').trim())
+        .filter(Boolean)
+        .map((title) => [title.toLowerCase(), title])
+    );
+
+    const tabs = OVERRIDE_CODE_TAB_ALLOWLIST
+      .map((allowedTitle) => tabsByNormalized.get(allowedTitle.toLowerCase()) || null)
+      .filter(Boolean);
+
     return { success: true, tabs };
   } catch (err) {
     return { success: false, message: err.message };
@@ -701,6 +852,217 @@ ipcMain.handle('get-stack-ranker', async () => {
       };
     }
     return { success: false, message: baseMsg };
+  }
+});
+
+ipcMain.handle('get-store-employee-directory', async () => {
+  try {
+    const sheets = await getSheetsClient();
+
+    const rangeRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: STACK_RANKER_SHEET_ID,
+      range: buildSheetRange(SALES_REPORT_TAB_NAME, 'B:C'),
+    });
+
+    const rows = rangeRes.data.values || [];
+    const byStore = new Map();
+
+    rows.forEach((row) => {
+      const store = String(row?.[0] || '').trim();
+      const employee = String(row?.[1] || '').trim();
+      if (!store || !employee) return;
+
+      if (!byStore.has(store)) byStore.set(store, new Set());
+      byStore.get(store).add(employee);
+    });
+
+    const stores = Array.from(byStore.keys()).sort((a, b) => a.localeCompare(b));
+    const directory = stores.map((store) => ({
+      store,
+      employees: Array.from(byStore.get(store)).sort((a, b) => a.localeCompare(b)),
+    }));
+
+    return { success: true, directory, sourceTab: SALES_REPORT_TAB_NAME };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to load store/employee directory.' };
+  }
+});
+
+ipcMain.handle('get-employee-highlights', async (_event, payload) => {
+  try {
+    const employeeName = String(payload?.employeeName || '').trim();
+    const employeeKey = normalizeName(employeeName);
+    if (!employeeKey) {
+      return { success: false, message: 'Employee name is required.' };
+    }
+
+    const sheets = await getSheetsClient();
+    const tabTitle = SALES_REPORT_TAB_NAME;
+
+    const aggregate = await getSalesAggregateData(sheets, tabTitle);
+    const saleCount = aggregate.employeeInvoiceIds.get(employeeKey)?.size || 0;
+    const topCompanyProducts = Array.from(aggregate.companyTotalsByProduct.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, COMPANY_TOP_PRODUCTS_FOR_EMPLOYEE_HIGHLIGHTS)
+      .map(([product]) => product);
+    const allowedProducts = new Set(topCompanyProducts);
+
+    const groupedCompanyTotals = new Map();
+    topCompanyProducts.forEach((product) => {
+      const bucket = getEmployeeHighlightBucket(product);
+      const qty = aggregate.companyTotalsByProduct.get(product) || 0;
+      groupedCompanyTotals.set(bucket, (groupedCompanyTotals.get(bucket) || 0) + qty);
+    });
+
+    const groupedEmployeeTotals = new Map();
+    aggregate.employeeProductTotals.forEach((productMap, key) => {
+      const grouped = new Map();
+      productMap.forEach((qty, product) => {
+        if (!allowedProducts.has(product)) return;
+        const bucket = getEmployeeHighlightBucket(product);
+        grouped.set(bucket, (grouped.get(bucket) || 0) + qty);
+      });
+      if (grouped.size > 0) groupedEmployeeTotals.set(key, grouped);
+    });
+
+    const selectedGroupedTotals = groupedEmployeeTotals.get(employeeKey);
+    if (!selectedGroupedTotals || selectedGroupedTotals.size === 0) {
+      return {
+        success: true,
+        sourceTab: tabTitle,
+        employeeName,
+        items: [],
+        summary: {
+          saleCount,
+          leaderCount: 0,
+          companyEmployeeCount: aggregate.employeeProductTotals.size,
+        },
+      };
+    }
+
+    const items = [];
+    for (const [bucket, qty] of selectedGroupedTotals.entries()) {
+      const companyTotal = groupedCompanyTotals.get(bucket) || 0;
+      const sellers = [];
+      groupedEmployeeTotals.forEach((bucketMap) => {
+        const employeeQty = bucketMap.get(bucket) || 0;
+        if (employeeQty > 0) sellers.push(employeeQty);
+      });
+      if (sellers.length === 0) continue;
+
+      const higherCount = sellers.filter((amount) => amount > qty).length;
+      const rank = higherCount + 1;
+      const sellerCount = sellers.length;
+      const topPercent = sellerCount <= 1
+        ? 1
+        : Math.round((higherCount / (sellerCount - 1)) * 99) + 1;
+      const sharePercent = companyTotal > 0 ? (qty / companyTotal) * 100 : 0;
+      if (topPercent > EMPLOYEE_HIGHLIGHT_MAX_TOP_PERCENT) continue;
+
+      items.push({
+        product: bucket,
+        qty: Math.round(qty),
+        companyTotal: Math.round(companyTotal),
+        rank,
+        sellerCount,
+        topPercent,
+        sharePercent: Math.round(sharePercent * 10) / 10,
+        isLeader: higherCount === 0,
+      });
+    }
+
+    items.sort((a, b) => {
+      if (a.isLeader !== b.isLeader) return a.isLeader ? -1 : 1;
+      if (b.qty !== a.qty) return b.qty - a.qty;
+      if (a.topPercent !== b.topPercent) return a.topPercent - b.topPercent;
+      return b.sharePercent - a.sharePercent;
+    });
+
+    const topItems = items.slice(0, MAX_EMPLOYEE_HIGHLIGHTS);
+    const leaderCount = topItems.filter((row) => row.isLeader).length;
+
+    return {
+      success: true,
+      sourceTab: tabTitle,
+      employeeName,
+      items: topItems,
+      summary: {
+        saleCount,
+        leaderCount,
+        companyEmployeeCount: aggregate.employeeProductTotals.size,
+      },
+    };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to calculate employee highlights.' };
+  }
+});
+
+ipcMain.handle('get-store-stats', async (_event, payload) => {
+  try {
+    const storeName = String(payload?.storeName || '').trim();
+    const storeKey = normalizeName(storeName);
+    if (!storeKey) return { success: false, message: 'Store name is required.' };
+
+    const sheets = await getSheetsClient();
+    const tabTitle = SALES_REPORT_TAB_NAME;
+    const aggregate = await getSalesAggregateData(sheets, tabTitle);
+
+    const totalUnits = aggregate.overallByStore.get(storeKey) || 0;
+    const totalNetProfit = aggregate.netProfitByStore.get(storeKey) || 0;
+    const storeCount = aggregate.overallByStore.size;
+    if (totalUnits <= 0 || storeCount === 0) {
+      return {
+        success: true,
+        sourceTab: tabTitle,
+        storeName,
+        stats: null,
+      };
+    }
+
+    const allStoreMetrics = Array.from(aggregate.overallByStore.keys())
+      .map((key) => {
+        const invoices = aggregate.storeInvoiceIds.get(key)?.size || 0;
+        const gp = aggregate.netProfitByStore.get(key) || 0;
+        const avg = invoices > 0 ? gp / invoices : 0;
+        return avg;
+      });
+    const invoiceCount = aggregate.storeInvoiceIds.get(storeKey)?.size || 0;
+    const avgGrossProfitPerInvoice = invoiceCount > 0 ? totalNetProfit / invoiceCount : 0;
+    const higherCount = allStoreMetrics.filter((avg) => avg > avgGrossProfitPerInvoice).length;
+    const rank = higherCount + 1;
+    const topPercent = storeCount <= 1
+      ? 1
+      : Math.round((higherCount / (storeCount - 1)) * 99) + 1;
+    const topProductMap = aggregate.storeProductTotals.get(storeKey) || new Map();
+    let topProductName = '';
+    let topProductQty = 0;
+    topProductMap.forEach((qty, product) => {
+      if (qty > topProductQty) {
+        topProductQty = qty;
+        topProductName = product;
+      }
+    });
+
+    return {
+      success: true,
+      sourceTab: tabTitle,
+      storeName: aggregate.storeDisplayNames.get(storeKey) || storeName,
+      stats: {
+        totalUnits: Math.round(totalUnits),
+        rank,
+        storeCount,
+        topPercent,
+        invoiceCount,
+        totalNetProfit: Math.round(totalNetProfit * 100) / 100,
+        avgGrossProfitPerInvoice: Math.round(avgGrossProfitPerInvoice * 100) / 100,
+        topProduct: {
+          name: topProductName || 'N/A',
+          qty: Math.round(topProductQty),
+        },
+      },
+    };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to load store stats.' };
   }
 });
 

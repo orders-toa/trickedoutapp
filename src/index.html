@@ -33,6 +33,111 @@
       user-select: none;
     }
 
+    .store-drawer {
+      order: 3;
+      width: 34px;
+      flex-shrink: 0;
+      position: relative;
+      overflow: visible;
+      transition: width 0.25s ease;
+    }
+
+    body.store-drawer-open .store-drawer {
+      width: 280px;
+    }
+
+    .store-drawer-panel {
+      width: 280px;
+      height: calc(100vh - 40px);
+      margin-top: 40px;
+      background: #060606;
+      border-left: 1px solid var(--border);
+      padding: 18px 16px;
+      transform: translateX(246px);
+      transition: transform 0.25s ease;
+      overflow-y: auto;
+    }
+
+    body.store-drawer-open .store-drawer-panel {
+      transform: translateX(0);
+    }
+
+    .store-drawer-toggle {
+      position: absolute;
+      top: 84px;
+      right: 0;
+      width: 30px;
+      height: 146px;
+      border: 1px solid var(--border);
+      border-right: none;
+      border-radius: 8px 0 0 8px;
+      background: #101010;
+      color: var(--text);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 17px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      writing-mode: vertical-rl;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      z-index: 950;
+    }
+
+    .store-drawer-toggle:hover {
+      background: #181818;
+    }
+
+    body.store-drawer-open .store-drawer-toggle {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .store-drawer-close {
+      position: absolute;
+      top: 56px;
+      left: -28px;
+      width: 0;
+      height: 34px;
+      border: none;
+      background: #101010;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      overflow: hidden;
+      transition: width 0.25s ease, border-color 0.2s, background-color 0.2s;
+      z-index: 951;
+      border-top: 1px solid transparent;
+      border-left: 1px solid transparent;
+      border-bottom: 1px solid transparent;
+      border-radius: 6px 0 0 6px;
+    }
+
+    body.store-drawer-open .store-drawer-close {
+      width: 28px;
+      border-color: var(--border);
+    }
+
+    .store-drawer-close:hover {
+      background: #1a1a1a;
+    }
+
+    .store-drawer-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .store-drawer-status {
+      margin-top: 6px;
+      min-height: 16px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
     /* ── Title bar drag region ── */
     .titlebar {
       position: fixed;
@@ -81,12 +186,12 @@
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      padding-top: 50px;
+      padding-top: 0;
       flex-shrink: 0;
     }
 
     .sidebar-logo {
-      padding: 24px 20px 32px;
+      padding: 10px 20px 20px;
       border-bottom: 1px solid var(--border);
       display: flex;
       flex-direction: column;
@@ -94,8 +199,10 @@
     }
 
     .sidebar-logo .brand-logo {
-      width: 110px;
-      height: 110px;
+      width: 121px;
+      max-width: 100%;
+      max-height: 121px;
+      height: auto;
       display: block;
       object-fit: contain;
     }
@@ -169,6 +276,7 @@
 
     /* ── Main content ── */
     .main {
+      order: 2;
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -355,6 +463,141 @@
       opacity: 0.8;
     }
 
+    .employee-highlights {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0c0c0c;
+      padding: 10px;
+    }
+
+    .employee-sales-hero {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0d0d0d;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .employee-sales-number {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 44px;
+      line-height: 1;
+      letter-spacing: 1px;
+      color: var(--text);
+    }
+
+    .employee-sales-label {
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .employee-highlights-summary {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 2px;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1;
+    }
+
+    .employee-highlights-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .employee-highlight-item {
+      border: 1px solid #222;
+      border-radius: 7px;
+      padding: 8px;
+      background: #111;
+      min-height: 96px;
+    }
+
+    .employee-highlight-item.leader {
+      border-color: rgba(215, 25, 32, 0.5);
+      box-shadow: inset 0 0 0 1px rgba(215, 25, 32, 0.2);
+    }
+
+    .employee-highlight-name {
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 4px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .employee-highlight-value {
+      font-size: 28px;
+      line-height: 1;
+      color: var(--text);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .employee-highlight-meta {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .store-stats {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0c0c0c;
+      padding: 10px;
+    }
+
+    .store-stats-summary {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
+    .store-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .store-stat-card {
+      border: 1px solid #222;
+      border-radius: 7px;
+      padding: 8px;
+      background: #111;
+      min-height: 86px;
+    }
+
+    .store-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .store-stat-value {
+      font-size: 18px;
+      line-height: 1.1;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+
+    .store-stat-sub {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+
     /* Action buttons */
     .actions {
       display: flex;
@@ -444,6 +687,23 @@
     }
 
     .input-group input::placeholder { color: var(--muted); }
+
+    .input-group select {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-group select:focus {
+      border-color: var(--accent);
+    }
 
     .input-group textarea {
       width: 100%;
@@ -904,12 +1164,51 @@
     </div>
   </div>
 
+  <aside class="store-drawer" id="storeDrawer">
+    <button id="toggleStoreDrawerBtn" class="store-drawer-toggle" aria-label="Toggle store selector">
+      See Stats
+    </button>
+    <button id="closeStoreDrawerBtn" class="store-drawer-close" aria-label="Close stats panel">×</button>
+    <div class="store-drawer-panel">
+      <div class="store-drawer-title">Store + Employee</div>
+      <div class="input-group">
+        <label>Store Location</label>
+        <select id="storeDrawerStoreSelect">
+          <option value="">Loading stores...</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>Employee</label>
+        <select id="storeDrawerEmployeeSelect" disabled>
+          <option value="">Select a store first...</option>
+        </select>
+      </div>
+      <div class="store-drawer-status" id="storeDrawerStatus"></div>
+      <div class="employee-sales-hero">
+        <div class="employee-sales-number" id="employeeSalesNumber">--</div>
+        <div class="employee-sales-label">Sales so Far!</div>
+      </div>
+      <div class="employee-highlights">
+        <div class="employee-highlights-summary" id="employeeHighlightsSummary">
+          Highlights
+        </div>
+        <div class="employee-highlights-list" id="employeeHighlightsList"></div>
+      </div>
+      <div class="store-stats">
+        <div class="store-stats-summary" id="storeStatsSummary">
+          Store Highlights
+        </div>
+        <div class="store-stats-grid" id="storeStatsGrid"></div>
+      </div>
+    </div>
+  </aside>
+
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="sidebar-logo">
       <img
         class="brand-logo"
-        src="../assets/icon-256.png"
+        src="../assets/icon-sidebar.png"
         alt="Tricked Out Accessories logo"
       />
       <div class="sub">RQ Companion</div>
@@ -1018,7 +1317,7 @@
           <div class="card-label">Used By</div>
           <div class="input-group">
             <label>Employee Name</label>
-            <input type="text" id="employeeNameInput" placeholder="Type name" />
+            <input type="text" id="employeeNameInput" placeholder="Select from left panel" readonly />
           </div>
           <div class="input-group">
             <label>Customer Name</label>

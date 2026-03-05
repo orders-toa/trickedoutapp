@@ -25,6 +25,16 @@ const generateBtn = document.getElementById('generateBtn');
 const codeBox = document.getElementById('codeBox');
 const statusMsg = document.getElementById('statusMsg');
 const tabSelector = document.getElementById('tabSelector');
+const toggleStoreDrawerBtn = document.getElementById('toggleStoreDrawerBtn');
+const closeStoreDrawerBtn = document.getElementById('closeStoreDrawerBtn');
+const storeDrawerStoreSelect = document.getElementById('storeDrawerStoreSelect');
+const storeDrawerEmployeeSelect = document.getElementById('storeDrawerEmployeeSelect');
+const storeDrawerStatus = document.getElementById('storeDrawerStatus');
+const employeeSalesNumber = document.getElementById('employeeSalesNumber');
+const employeeHighlightsSummary = document.getElementById('employeeHighlightsSummary');
+const employeeHighlightsList = document.getElementById('employeeHighlightsList');
+const storeStatsSummary = document.getElementById('storeStatsSummary');
+const storeStatsGrid = document.getElementById('storeStatsGrid');
 const connDot = document.getElementById('connDot');
 const connLabel = document.getElementById('connLabel');
 const employeeNameInput = document.getElementById('employeeNameInput');
@@ -80,6 +90,8 @@ let shoutOutRotationTimer = null;
 let shoutOutFadeTimer = null;
 let shoutOutRotationIndex = 0;
 let recentShoutOuts = [];
+let storeEmployeeDirectory = [];
+let highlightRequestToken = 0;
 let supplyCart = {};
 let supplyOtherRequests = [];
 let nextOtherRequestId = 1;
@@ -146,11 +158,267 @@ function isNameValid(value) {
   return value.trim().length >= 4;
 }
 
+function isEmployeeValid(value) {
+  return value.trim().length > 0;
+}
+
 function updateGenerateButtonState() {
-  const validEmployee = isNameValid(employeeNameInput?.value || '');
+  const validEmployee = isEmployeeValid(employeeNameInput?.value || '');
   const validCustomer = isNameValid(customerNameInput?.value || '');
   const ready = Boolean(selectedTab) && validEmployee && validCustomer && !isGenerating;
   if (generateBtn) generateBtn.disabled = !ready;
+}
+
+function setStoreDrawerStatus(msg, type = '') {
+  if (!storeDrawerStatus) return;
+  storeDrawerStatus.textContent = msg;
+  storeDrawerStatus.style.color = type === 'error' ? 'var(--accent2)' : 'var(--muted)';
+}
+
+function setEmployeeHighlightsSummary(message, type = '') {
+  if (!employeeHighlightsSummary) return;
+  employeeHighlightsSummary.textContent = message;
+  employeeHighlightsSummary.style.color = type === 'error' ? 'var(--accent2)' : 'var(--text)';
+}
+
+function clearEmployeeHighlightsList() {
+  if (!employeeHighlightsList) return;
+  employeeHighlightsList.innerHTML = '';
+}
+
+function formatMetricNumber(value) {
+  return Number(value || 0).toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  });
+}
+
+function setEmployeeSalesNumber(value) {
+  if (!employeeSalesNumber) return;
+  const raw = Number(value);
+  employeeSalesNumber.textContent = Number.isFinite(raw)
+    ? raw.toLocaleString(undefined, { maximumFractionDigits: 0 })
+    : '--';
+}
+
+function setStoreStatsSummary(message, type = '') {
+  if (!storeStatsSummary) return;
+  storeStatsSummary.textContent = message;
+  storeStatsSummary.style.color = type === 'error' ? 'var(--accent2)' : 'var(--text)';
+}
+
+function clearStoreStatsGrid() {
+  if (!storeStatsGrid) return;
+  storeStatsGrid.innerHTML = '';
+}
+
+function renderStoreStatsCards(stats) {
+  if (!storeStatsGrid) return;
+  const cards = [
+    {
+      label: 'Products Sold',
+      value: formatMetricNumber(stats.totalUnits),
+      sub: `${formatMetricNumber(stats.invoiceCount)} invoices`,
+    },
+    {
+      label: 'Store Rank',
+      value: `#${stats.rank}`,
+      sub: `Top ${stats.topPercent}% by GP/invoice`,
+    },
+    {
+      label: 'Avg GP/Invoice',
+      value: formatMoney(stats.avgGrossProfitPerInvoice),
+      sub: 'Gross profit per invoice',
+    },
+    {
+      label: 'Total Gross Profit',
+      value: formatMoney(stats.totalNetProfit),
+      sub: `Top product: ${String(stats.topProduct?.name || 'N/A')}`,
+    },
+  ];
+
+  storeStatsGrid.innerHTML = cards
+    .map((card) => `
+      <div class="store-stat-card">
+        <div class="store-stat-label">${escapeHtml(card.label)}</div>
+        <div class="store-stat-value">${escapeHtml(card.value)}</div>
+        <div class="store-stat-sub">${escapeHtml(card.sub)}</div>
+      </div>
+    `)
+    .join('');
+}
+
+async function loadStoreStats(storeName) {
+  if (!window.toaAPI?.getStoreStats) return;
+
+  const selectedStore = String(storeName || '').trim();
+  if (!selectedStore) {
+    clearStoreStatsGrid();
+    setStoreStatsSummary('Store Highlights');
+    return;
+  }
+
+  clearStoreStatsGrid();
+  setStoreStatsSummary('Store Highlights');
+
+  try {
+    const res = await window.toaAPI.getStoreStats({ storeName: selectedStore });
+    if (!res.success) throw new Error(res.message || 'Failed to load store stats.');
+
+    if (!res.stats) {
+      clearStoreStatsGrid();
+      setStoreStatsSummary('Store Highlights');
+      return;
+    }
+
+    setStoreStatsSummary('Store Highlights');
+    renderStoreStatsCards(res.stats);
+  } catch (err) {
+    clearStoreStatsGrid();
+    setStoreStatsSummary(`Failed to load store stats: ${err.message}`, 'error');
+  }
+}
+
+function renderEmployeeHighlights(items) {
+  if (!employeeHighlightsList) return;
+  employeeHighlightsList.innerHTML = items
+    .map((item) => {
+      const rankText = item.isLeader
+        ? 'Leads company sales'
+        : `Top ${item.topPercent}% in company sales`;
+      return `
+        <div class="employee-highlight-item ${item.isLeader ? 'leader' : ''}">
+          <div class="employee-highlight-name">${escapeHtml(item.product)}</div>
+          <div class="employee-highlight-value">${escapeHtml(formatMetricNumber(item.qty))}</div>
+          <div class="employee-highlight-meta">
+            ${escapeHtml(rankText)}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+async function loadEmployeeHighlights(employeeName) {
+  if (!window.toaAPI?.getEmployeeHighlights) return;
+
+  const selectedName = String(employeeName || '').trim();
+  if (!selectedName) {
+    setEmployeeSalesNumber(null);
+    clearEmployeeHighlightsList();
+    setEmployeeHighlightsSummary('Highlights');
+    return;
+  }
+
+  const currentToken = ++highlightRequestToken;
+  clearEmployeeHighlightsList();
+  setEmployeeHighlightsSummary('Highlights');
+
+  try {
+    const res = await window.toaAPI.getEmployeeHighlights({ employeeName: selectedName });
+    if (currentToken !== highlightRequestToken) return;
+    if (!res.success) throw new Error(res.message || 'Failed to load employee highlights.');
+
+    const items = Array.isArray(res.items) ? res.items : [];
+    setEmployeeSalesNumber(res.summary?.saleCount ?? 0);
+    if (items.length === 0) {
+      clearEmployeeHighlightsList();
+      setEmployeeHighlightsSummary('Highlights');
+      setStoreDrawerStatus(`No stats found for ${selectedName} in S/P Month to Date.`, 'error');
+      return;
+    }
+
+    setEmployeeHighlightsSummary('Highlights');
+    renderEmployeeHighlights(items);
+  } catch (err) {
+    setEmployeeSalesNumber(null);
+    clearEmployeeHighlightsList();
+    setEmployeeHighlightsSummary(`Failed to load highlights: ${err.message}`, 'error');
+    setStoreDrawerStatus(`Stats failed: ${err.message}`, 'error');
+  }
+}
+
+function populateEmployeeOptions(storeName) {
+  if (!storeDrawerEmployeeSelect) return;
+
+  const storeEntry = storeEmployeeDirectory.find((entry) => entry.store === storeName);
+  const employees = storeEntry?.employees || [];
+
+  if (!storeName) {
+    storeDrawerEmployeeSelect.innerHTML = '<option value="">Select a store first...</option>';
+    storeDrawerEmployeeSelect.disabled = true;
+    setStoreDrawerStatus('Select a store to load employees.');
+    if (employeeNameInput) employeeNameInput.value = '';
+    loadEmployeeHighlights('');
+    loadStoreStats('');
+    updateGenerateButtonState();
+    return;
+  }
+
+  if (employees.length === 0) {
+    storeDrawerEmployeeSelect.innerHTML = '<option value="">No employees found for this store</option>';
+    storeDrawerEmployeeSelect.disabled = true;
+    setStoreDrawerStatus(`No employees found for ${storeName}.`, 'error');
+    if (employeeNameInput) employeeNameInput.value = '';
+    loadEmployeeHighlights('');
+    loadStoreStats(storeName);
+    updateGenerateButtonState();
+    return;
+  }
+
+  storeDrawerEmployeeSelect.disabled = false;
+  storeDrawerEmployeeSelect.innerHTML = `
+    <option value="">Select an employee...</option>
+    ${employees.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}
+  `;
+  storeDrawerEmployeeSelect.value = '';
+  setStoreDrawerStatus(`${employees.length} employees for ${storeName}.`);
+  if (employeeNameInput) employeeNameInput.value = '';
+  loadEmployeeHighlights('');
+  loadStoreStats(storeName);
+  updateGenerateButtonState();
+}
+
+async function loadStoreEmployeeDirectory() {
+  if (!window.toaAPI?.getStoreEmployeeDirectory || !storeDrawerStoreSelect) return;
+
+  storeDrawerStoreSelect.innerHTML = '<option value="">Loading stores...</option>';
+  storeDrawerStoreSelect.disabled = true;
+  if (storeDrawerEmployeeSelect) {
+    storeDrawerEmployeeSelect.innerHTML = '<option value="">Select a store first...</option>';
+    storeDrawerEmployeeSelect.disabled = true;
+  }
+
+  try {
+    const res = await window.toaAPI.getStoreEmployeeDirectory();
+    if (!res.success) throw new Error(res.message || 'Failed to load store directory.');
+
+    storeEmployeeDirectory = Array.isArray(res.directory) ? res.directory : [];
+    if (storeEmployeeDirectory.length === 0) {
+      storeDrawerStoreSelect.innerHTML = '<option value="">No stores found</option>';
+      setStoreDrawerStatus('No store/employee rows found in columns B:C.', 'error');
+      return;
+    }
+
+    storeDrawerStoreSelect.innerHTML = `
+      <option value="">Select a store...</option>
+      ${storeEmployeeDirectory
+        .map((entry) => `<option value="${escapeHtml(entry.store)}">${escapeHtml(entry.store)}</option>`)
+        .join('')}
+    `;
+    storeDrawerStoreSelect.disabled = false;
+    setStoreDrawerStatus(`Loaded ${storeEmployeeDirectory.length} stores. Select one to continue.`);
+  } catch (err) {
+    storeDrawerStoreSelect.innerHTML = '<option value="">Failed to load stores</option>';
+    setStoreDrawerStatus(`Failed: ${err.message}`, 'error');
+  }
 }
 
 // Load tabs from Google Sheet
@@ -196,8 +464,8 @@ generateBtn?.addEventListener('click', async () => {
   const customerName = customerNameInput.value.trim();
   const notes = notesInput.value.trim();
 
-  if (!isNameValid(employeeName) || !isNameValid(customerName)) {
-    setStatus('Employee Name and Customer Name must each be at least 4 characters.', 'error');
+  if (!isEmployeeValid(employeeName) || !isNameValid(customerName)) {
+    setStatus('Select an employee and enter a customer name (at least 4 characters).', 'error');
     updateGenerateButtonState();
     return;
   }
@@ -822,9 +1090,29 @@ function styleToInline(styleObj) {
   return rules.join(';');
 }
 
-employeeNameInput?.addEventListener('input', updateGenerateButtonState);
 customerNameInput?.addEventListener('input', updateGenerateButtonState);
 refreshStackRankerBtn?.addEventListener('click', loadStackRanker);
+toggleStoreDrawerBtn?.addEventListener('click', () => {
+  document.body.classList.toggle('store-drawer-open');
+});
+closeStoreDrawerBtn?.addEventListener('click', () => {
+  document.body.classList.remove('store-drawer-open');
+});
+storeDrawerStoreSelect?.addEventListener('change', () => {
+  const selectedStore = String(storeDrawerStoreSelect.value || '');
+  populateEmployeeOptions(selectedStore);
+});
+storeDrawerEmployeeSelect?.addEventListener('change', () => {
+  const selectedEmployee = String(storeDrawerEmployeeSelect.value || '').trim();
+  if (employeeNameInput) employeeNameInput.value = selectedEmployee;
+  if (selectedEmployee) {
+    setStoreDrawerStatus(`Loading stats for ${selectedEmployee}...`);
+  } else {
+    setStoreDrawerStatus('Select an employee to view stats.');
+  }
+  loadEmployeeHighlights(selectedEmployee);
+  updateGenerateButtonState();
+});
 submitSuggestionBtn?.addEventListener('click', async () => {
   const suggestion = suggestionTextInput?.value.trim() || '';
   const name = suggestionNameInput?.value.trim() || '';
@@ -902,6 +1190,7 @@ reactClapBtn?.addEventListener('click', () => submitShoutOutReaction('clap'));
 
 // Init
 loadTabs();
+loadStoreEmployeeDirectory();
 updateGenerateButtonState();
 updateSuggestionMode();
 loadRecentShoutOuts();
