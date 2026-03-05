@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('toaAPI', {
   getTabs: () => ipcRenderer.invoke('get-tabs'),
   getStoreEmployeeDirectory: () => ipcRenderer.invoke('get-store-employee-directory'),
   getEmployeeHighlights: (data) => ipcRenderer.invoke('get-employee-highlights', data),
+  getCompanyLeaders: () => ipcRenderer.invoke('get-company-leaders'),
   getStoreStats: (data) => ipcRenderer.invoke('get-store-stats', data),
   getStackRanker: () => ipcRenderer.invoke('get-stack-ranker'),
   submitSupplyOrder: (data) => ipcRenderer.invoke('submit-supply-order', data),

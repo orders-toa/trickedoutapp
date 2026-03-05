@@ -13,7 +13,7 @@ document.querySelectorAll('.nav-item').forEach((item) => {
       loadStackRanker();
     }
     if (pageId === 'home') {
-      loadRecentShoutOuts();
+      loadHomePanels();
     }
   });
 });
@@ -55,6 +55,8 @@ const submitSuggestionBtn = document.getElementById('submitSuggestionBtn');
 const homeShoutOutMessage = document.getElementById('homeShoutOutMessage');
 const homeShoutOutMeta = document.getElementById('homeShoutOutMeta');
 const homeShoutOutReactionCount = document.getElementById('homeShoutOutReactionCount');
+const companyLeadersSummary = document.getElementById('companyLeadersSummary');
+const companyLeadersGrid = document.getElementById('companyLeadersGrid');
 const reactLikeBtn = document.getElementById('reactLikeBtn');
 const reactLoveBtn = document.getElementById('reactLoveBtn');
 const reactLaughBtn = document.getElementById('reactLaughBtn');
@@ -200,6 +202,26 @@ function formatMoney(value) {
   });
 }
 
+function formatPercentTenths(value) {
+  const numeric = Number(value || 0);
+  const rounded = Math.round(numeric * 10) / 10;
+  return `${rounded.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
+function formatCompanyLeaderValue(item) {
+  if (item.metricType === 'glassAttachmentRate') return formatPercentTenths(item.value);
+  return formatMetricNumber(item.value);
+}
+
+function setCompanyLeadersSummary(message, type = '') {
+  if (!companyLeadersSummary) return;
+  companyLeadersSummary.textContent = message;
+  companyLeadersSummary.style.color = type === 'error' ? 'var(--accent2)' : 'var(--text)';
+}
+
 function setEmployeeSalesNumber(value) {
   if (!employeeSalesNumber) return;
   const raw = Number(value);
@@ -290,15 +312,26 @@ function renderEmployeeHighlights(items) {
   if (!employeeHighlightsList) return;
   employeeHighlightsList.innerHTML = items
     .map((item) => {
-      const rankText = item.isLeader
-        ? 'Leads company sales'
-        : `Top ${item.topPercent}% in company sales`;
+      const isGlassAttachmentRate = item.metricType === 'glassAttachmentRate';
+      const rankText = isGlassAttachmentRate
+        ? (item.isLeader
+            ? 'Leads company glass attachment rate'
+            : `Top ${item.topPercent}% in company glass attachment rate`)
+        : (item.isLeader
+            ? 'Leads company sales'
+            : `Top ${item.topPercent}% in company sales`);
+      const valueText = isGlassAttachmentRate
+        ? formatPercentTenths(item.qty)
+        : formatMetricNumber(item.qty);
+      const detailText = isGlassAttachmentRate
+        ? `${rankText} (${formatMetricNumber(item.numerator)}/${formatMetricNumber(item.denominator)})`
+        : rankText;
       return `
         <div class="employee-highlight-item ${item.isLeader ? 'leader' : ''}">
           <div class="employee-highlight-name">${escapeHtml(item.product)}</div>
-          <div class="employee-highlight-value">${escapeHtml(formatMetricNumber(item.qty))}</div>
+          <div class="employee-highlight-value">${escapeHtml(valueText)}</div>
           <div class="employee-highlight-meta">
-            ${escapeHtml(rankText)}
+            ${escapeHtml(detailText)}
           </div>
         </div>
       `;
@@ -721,6 +754,57 @@ async function loadRecentShoutOuts() {
     homeShoutOutMessage.textContent = `Failed to load shout outs: ${err.message}`;
     homeShoutOutMeta.textContent = '';
   }
+}
+
+function renderCompanyLeaders(items) {
+  if (!companyLeadersGrid) return;
+  companyLeadersGrid.innerHTML = items
+    .map((item) => {
+      const locationText = String(item.location || '').trim();
+      const personText = locationText
+        ? `${item.employeeName} at ${locationText}`
+        : String(item.employeeName || '');
+      const detailText = item.metricType === 'glassAttachmentRate'
+        ? `${item.metricName} (${formatMetricNumber(item.numerator)}/${formatMetricNumber(item.denominator)})`
+        : item.metricName;
+      return `
+        <div class="store-stat-card">
+          <div class="store-stat-label">${escapeHtml(detailText)}</div>
+          <div class="store-stat-value">${escapeHtml(formatCompanyLeaderValue(item))}</div>
+          <div class="store-stat-sub">${escapeHtml(personText)}</div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+async function loadCompanyLeaders() {
+  if (!window.toaAPI?.getCompanyLeaders || !companyLeadersSummary || !companyLeadersGrid) return;
+
+  setCompanyLeadersSummary('Company Leaders');
+  companyLeadersGrid.innerHTML = '';
+
+  try {
+    const res = await window.toaAPI.getCompanyLeaders();
+    if (!res.success) throw new Error(res.message || 'Failed to load company leaders.');
+
+    const leaders = Array.isArray(res.leaders) ? res.leaders : [];
+    if (leaders.length === 0) {
+      setCompanyLeadersSummary('Company Leaders');
+      return;
+    }
+
+    setCompanyLeadersSummary(`Company Leaders (${leaders.length})`);
+    renderCompanyLeaders(leaders);
+  } catch (err) {
+    setCompanyLeadersSummary(`Failed to load leaders: ${err.message}`, 'error');
+    companyLeadersGrid.innerHTML = '';
+  }
+}
+
+function loadHomePanels() {
+  loadRecentShoutOuts();
+  loadCompanyLeaders();
 }
 
 function setSupplyStatus(target, msg, type = '') {
@@ -1193,5 +1277,5 @@ loadTabs();
 loadStoreEmployeeDirectory();
 updateGenerateButtonState();
 updateSuggestionMode();
-loadRecentShoutOuts();
+loadHomePanels();
 initSupplyOrders();

@@ -734,6 +734,29 @@
       max-width: 760px;
     }
 
+    .company-leaders-section {
+      display: grid;
+      gap: 10px;
+    }
+
+    .company-leaders-heading {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 34px;
+      letter-spacing: 1px;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .company-leaders-grid {
+      margin-top: 4px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .company-leaders-grid .store-stat-card {
+      min-height: 104px;
+    }
+
     .shoutout-rotator {
       min-height: 180px;
       display: flex;
@@ -1150,6 +1173,10 @@
         width: 220px;
         margin-left: 0;
       }
+
+      .company-leaders-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
@@ -1264,13 +1291,9 @@
       </div>
 
       <div class="home-grid">
-        <div class="card">
-          <div class="card-label">Quick Start</div>
-          <p style="color: var(--muted); font-size: 13px; line-height: 1.6;">
-            Use <strong>Override Codes</strong> to generate and log override codes,
-            <strong>Stack Ranker</strong> to view ranking metrics, and
-            <strong>Suggestions</strong> to submit app improvements.
-          </p>
+        <div class="company-leaders-section">
+          <div class="company-leaders-heading" id="companyLeadersSummary">Company Leaders</div>
+          <div class="store-stats-grid company-leaders-grid" id="companyLeadersGrid"></div>
         </div>
 
         <div class="card shoutout-rotator">
@@ -1289,6 +1312,7 @@
             <div class="shoutout-reaction-count" id="homeShoutOutReactionCount"></div>
           </div>
         </div>
+
       </div>
     </div>
 
