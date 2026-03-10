@@ -761,9 +761,7 @@ function renderCompanyLeaders(items) {
   companyLeadersGrid.innerHTML = items
     .map((item) => {
       const locationText = String(item.location || '').trim();
-      const personText = locationText
-        ? `${item.employeeName} at ${locationText}`
-        : String(item.employeeName || '');
+      const nameText = String(item.employeeName || '').trim();
       const detailText = item.metricType === 'glassAttachmentRate'
         ? `${item.metricName} (${formatMetricNumber(item.numerator)}/${formatMetricNumber(item.denominator)})`
         : item.metricName;
@@ -771,7 +769,10 @@ function renderCompanyLeaders(items) {
         <div class="store-stat-card">
           <div class="store-stat-label">${escapeHtml(detailText)}</div>
           <div class="store-stat-value">${escapeHtml(formatCompanyLeaderValue(item))}</div>
-          <div class="store-stat-sub">${escapeHtml(personText)}</div>
+          <div class="store-stat-sub">
+            <div class="company-leader-name">${escapeHtml(nameText)}</div>
+            <div class="company-leader-location">${escapeHtml(locationText)}</div>
+          </div>
         </div>
       `;
     })
@@ -794,7 +795,7 @@ async function loadCompanyLeaders() {
       return;
     }
 
-    setCompanyLeadersSummary(`Company Leaders (${leaders.length})`);
+    setCompanyLeadersSummary('Company Leaders');
     renderCompanyLeaders(leaders);
   } catch (err) {
     setCompanyLeadersSummary(`Failed to load leaders: ${err.message}`, 'error');
